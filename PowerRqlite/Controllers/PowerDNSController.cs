@@ -88,11 +88,11 @@ namespace PowerRqlite.Controllers
 
                 if (qtype == "ANY")
                 {
-                    query = $"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE name='{qname}'";
+                    query = $"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name)='{qname.ToLower()}'";
                 }
                 else
                 {
-                    query = $"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE name='{qname}' AND type='{qtype}'";
+                    query = $"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name)='{qname.ToLower()}' AND type='{qtype}'";
                 }
 
                 using (QueryResult queryResult = await _rqliteService.QueryAsync(query, ReadConsistencyLevel.None))
@@ -132,7 +132,7 @@ namespace PowerRqlite.Controllers
                     name = name.Remove(name.Length - 1);
                 }
 
-                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT kind,content FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND domains.name='{name}'"))
+                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT kind,content FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND LOWER(domains.name)='{name.ToLower()}'"))
                 {
                     return KeyToArrayResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
                 }
@@ -164,7 +164,7 @@ namespace PowerRqlite.Controllers
                     name = name.Remove(name.Length - 1);
                 }
 
-                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT content FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND domains.name='{name}' AND domainmetadata.kind='{kind}'"))
+                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT content FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND LOWER(domains.name)='{name.ToLower()}' AND LOWER(domainmetadata.kind)='{kind.ToLower()}'"))
                 {
                     return StringArrayResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
                 }
@@ -210,7 +210,7 @@ namespace PowerRqlite.Controllers
                 }
 
 
-                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id,name,master,last_check,type,notified_serial,account FROM domains WHERE name='{name}'"))
+                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id,name,master,last_check,type,notified_serial,account FROM domains WHERE LOWER(name)='{name.ToLower()}'"))
                 {
                     return DomainInfoResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
                 }
@@ -270,7 +270,7 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id,name,master,last_check,type,notified_serial,account FROM domains WHERE kind='master'"))
+                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id,name,master,last_check,type,notified_serial,account FROM domains WHERE LOWER(kind)='master'"))
                 {
                     return GetUpdatedMastersResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
                 }
@@ -308,7 +308,7 @@ namespace PowerRqlite.Controllers
 
                 if (value.Count() == 0)
                 {
-                    query = $"DELETE FROM domainmetadata WHERE domain_id={domain_id} AND kind='{kind}'";
+                    query = $"DELETE FROM domainmetadata WHERE domain_id={domain_id} AND LOWER(kind)='{kind.ToLower()}'";
                 }
                 else
                 {
@@ -423,7 +423,6 @@ namespace PowerRqlite.Controllers
             try
             {
                 bool result = false;
-                bool forceInsert = false;
                 List<string> querys = new List<string>();
                 bool removeTrailingDot = _configRoot.GetValue<bool>("RemoveTrailingDot");
                 int transactionid = -1;
@@ -434,19 +433,15 @@ namespace PowerRqlite.Controllers
                     qname = qname.Remove(qname.Length - 1);
                 }
 
-                if (_transactionManager.Transactions().Any(x => x.Key.domain_id == domain_id)) { transactionid = _transactionManager.Transactions().First(x => x.Key.domain_id == domain_id).Key.id; }
+                if (_transactionManager.Transactions().Any(x => x.Key.domain_id == domain_id)) { transactionid = _transactionManager.Transactions().LastOrDefault(x => x.Key.domain_id == domain_id).Key.id; }
 
-                if (rrset is null || rrset.Length == 0)
+                if (rrset.Length > 1)
                 {
-                    querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
+                    rrset.SkipLast(1).AsParallel().ForAll(x => x.ttl = (x.ttl / 10));
                 }
 
-                if (rrset.Where (x => x.qname == qname && x.qtype == qtype).Count() > 1)
-                {
-                    querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
-                    forceInsert = true;
-                }
-
+                querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
+    
                 foreach (Record rr in rrset)
                 {
 
@@ -455,15 +450,8 @@ namespace PowerRqlite.Controllers
                         rr.qname = rr.qname.Remove(rr.qname.Length - 1);
                     }
 
-                    if (await RecordExists(domain_id, qname, qtype) & !forceInsert)
-                    {
-                        querys.Add(GetUpdateRecordQuery(rr, domain_id, qname, qtype));
-                    }
-                    else
-                    {
-                        rr.domain_id = domain_id;
-                        querys.Add(GetInsertRecordQuery(rr));
-                    }
+                    rr.domain_id = domain_id;
+                    querys.Add(GetInsertRecordQuery(rr));
                 }
 
                 if (transactionid != -1)
@@ -598,7 +586,7 @@ namespace PowerRqlite.Controllers
 
         private string GetUpdateRecordQuery(Record rr, int domain_id, string qname, string qtype)
         {
-            return $"UPDATE records SET name='{rr.qname}',type='{rr.qtype}',content='{rr.content}',ttl={rr.ttl},disabled={rr.disabled},auth={rr.auth} WHERE domain_id={domain_id} AND (name='{qname}' AND type='{qtype}' AND content='{rr.content}')";
+            return $"UPDATE records SET name='{rr.qname}',type='{rr.qtype}',content='{rr.content}',ttl={rr.ttl},disabled={rr.disabled},auth={rr.auth} WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}' AND content='{rr.content}')";
         }
 
         private string GetDeleteRecordQuery(int domain_id, string qname, string qtype)
@@ -607,11 +595,11 @@ namespace PowerRqlite.Controllers
 
             if (qtype == "ANY")
             {
-                query = $"DELETE FROM records WHERE domain_id={domain_id} AND name='{qname}'";
+                query = $"DELETE FROM records WHERE domain_id={domain_id} AND LOWER(name)='{qname.ToLower()}'";
             }
             else
             {
-                query = $"DELETE FROM records WHERE domain_id={domain_id} AND (name='{qname}' AND type='{qtype}')";
+                query = $"DELETE FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}')";
             }
 
             return query;
@@ -620,7 +608,7 @@ namespace PowerRqlite.Controllers
         private async Task<bool> RecordExists(int domain_id,string qname,string qtype, string content = null)
         {
 
-            string query = string.IsNullOrWhiteSpace(content) ? $"SELECT name FROM records WHERE domain_id={domain_id} AND (name='{qname}' AND type='{qtype}')" : $"SELECT name FROM records WHERE domain_id={domain_id} AND (name='{qname}' AND type='{qtype}' AND content='{content}')";
+            string query = string.IsNullOrWhiteSpace(content) ? $"SELECT name FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}')" : $"SELECT name FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}' AND content='{content}')";
 
             using (QueryResult queryResult = await _rqliteService.QueryAsync(query))
             {
@@ -637,7 +625,7 @@ namespace PowerRqlite.Controllers
 
         private async Task<int> GetDomainID(string domainname)
         {
-            using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id FROM domains WHERE name='{domainname}'"))
+            using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id FROM domains WHERE LOWER(name)='{domainname.ToLower()}'"))
             {
 
                 if (queryResult.Results.FirstOrDefault().Values is null || queryResult.Results.FirstOrDefault().Values.Count <= 0)
