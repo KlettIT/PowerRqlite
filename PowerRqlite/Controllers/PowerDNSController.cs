@@ -46,7 +46,36 @@ namespace PowerRqlite.Controllers
             {
                 using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE domain_id={domain_id}"))
                 {
-                   return ListResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
+                    ListResponse response = ListResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
+
+                    // We need to ask Transaction Manager if we need to hook the lookup query
+                    if (_transactionManager.Transactions().Any() && _transactionManager.TransactionExistsWith(domain_id))
+                    {
+                            
+                        List<IRecord> recordsToDelete = new List<IRecord>();
+                        var transactionRecords = _transactionManager.GetLastTransaction(domain_id).Records;
+
+                        _logger.LogInformation($"Found existing Transaction which handles domain_id {domain_id} => Hooking this query with Transaction Manager");
+
+                        Parallel.ForEach(transactionRecords, record =>
+                        {
+                            switch (record.TransactionMode)
+                            {
+                                case Models.PowerDNS.Enums.TransactionMode.DELETE:
+                                    response.result.RemoveAll(x => x.domain_id == record.domain_id && x.qname == record.qname && x.qtype == record.qtype);
+                                    break;
+                                case Models.PowerDNS.Enums.TransactionMode.INSERT:
+                                    response.result.Add(record);
+                                    break;
+                            }
+                        });
+
+                        return response;
+                    }
+                    else
+                    {
+                        return response;
+                    }
                 }
             }
             catch (NoValuesException)
@@ -84,6 +113,25 @@ namespace PowerRqlite.Controllers
                 if (removeTrailingDot && qname.EndsWith("."))
                 {
                     qname = qname.Remove(qname.Length - 1);
+                }
+
+                // We need to ask Transaction Manager if we need to hook the lookup query
+                if (_transactionManager.Transactions().Any() && _transactionManager.TransactionExistsWith(qname, qtype))
+                {
+                    _logger.LogInformation($"Found existing Transaction which handles {qname} {qtype} => Hooking this query with Transaction Manager");
+                    // returns null when last transaction for this record was DELETE else it returns the record itself
+                    IRecord transactionRecord = _transactionManager.GetLastTransactionRecord(qname, qtype);
+                    if (transactionRecord is null)
+                    {
+                        _logger.LogInformation("Transaction Manager returned NULL => Record was deleted in Transaction => returning false");
+                        throw new NoValuesException(); 
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Transaction Manager recturned a record => Record was inserted / updated in transaction => returning record");
+                        _logger.LogDebug(transactionRecord.ToString());
+                        return new LookupResponse() { result = new List<IRecord>() { transactionRecord } };
+                    }
                 }
 
                 if (qtype == "ANY")
@@ -365,11 +413,11 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                int domain_id = _transactionManager.Transactions().Where(x => x.Key.id == trxid).First().Key.domain_id;
+                int domain_id = _transactionManager.GetTransaction(trxid).domain_id;
 
                 if (rr.domain_id <= 0) { rr.domain_id = domain_id; }
 
-                if (_transactionManager.AddTransaction(trxid, GetInsertRecordQuery(rr)))
+                if (_transactionManager.AddTransaction(trxid, GetInsertRecordQuery(rr),rr,Models.PowerDNS.Enums.TransactionMode.INSERT))
                 {
                     return new BoolResponse { result = true };
                 }
@@ -433,15 +481,25 @@ namespace PowerRqlite.Controllers
                     qname = qname.Remove(qname.Length - 1);
                 }
 
-                if (_transactionManager.Transactions().Any(x => x.Key.domain_id == domain_id)) { transactionid = _transactionManager.Transactions().LastOrDefault(x => x.Key.domain_id == domain_id).Key.id; }
+                if (_transactionManager.Transactions().Any(x => x.domain_id == domain_id)) { transactionid = _transactionManager.GetLastTransaction(domain_id).id; }
 
                 if (rrset.Length > 1)
                 {
                     rrset.SkipLast(1).AsParallel().ForAll(x => x.ttl = (x.ttl / 10));
                 }
 
-                querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
-    
+                if (transactionid != -1)
+                {
+                    if (!_transactionManager.AddTransaction(transactionid, GetDeleteRecordQuery(domain_id, qname, qtype), domain_id, qname, qtype, Models.PowerDNS.Enums.TransactionMode.DELETE))
+                    {
+                        throw new Exception($"failed to add transaction record to transaction with id {transactionid}");
+                    }
+                }
+                else
+                {
+                    querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
+                }
+
                 foreach (Record rr in rrset)
                 {
 
@@ -451,24 +509,24 @@ namespace PowerRqlite.Controllers
                     }
 
                     rr.domain_id = domain_id;
-                    querys.Add(GetInsertRecordQuery(rr));
-                }
 
-                if (transactionid != -1)
-                {
-                    foreach (var query in querys)
+                    if (transactionid != -1)
                     {
-                        if (!_transactionManager.AddTransaction(transactionid, query))
+                        if (!_transactionManager.AddTransaction(transactionid, GetInsertRecordQuery(rr), rr, Models.PowerDNS.Enums.TransactionMode.INSERT))
                         {
-                            throw new Exception($"failed to add query {query} to transaction {transactionid}");
+                            throw new Exception($"failed to add transaction record to transaction with id {transactionid}");
                         }
                     }
-
-                    result = true;
+                    else
+                    {
+                        querys.Add(GetInsertRecordQuery(rr));
+                    }
 
                 }
-                else
+
+                if (querys != null && querys.Count > 0)
                 {
+
                     using (ExecuteResult execResult = await _rqliteService.ExecuteBulkAsync(querys))
                     {
                         if (execResult.Results.Any(x => x is null || x.LastInsertId <= 0))
@@ -476,10 +534,9 @@ namespace PowerRqlite.Controllers
                             throw new Exception("One or more transactions failed to execute!");
                         }
                     }
-
-                    result = true;
-
                 }
+
+                result = true;
 
                 return new BoolResponse() { result = result };
 
@@ -518,7 +575,6 @@ namespace PowerRqlite.Controllers
         [HttpPost("committransaction/{trxid}")]
         public async Task<IResponse> commitTransaction(int trxid)
         {
-
             try
             {
                 var transactions = _transactionManager.GetTransactionQuerys(trxid);
@@ -639,32 +695,32 @@ namespace PowerRqlite.Controllers
             }
         }
 
-        private async Task<IResponse> DeleteRecord(int domain_id, string qname, string qtype)
-        {
-            try
-            {
-                string query = GetDeleteRecordQuery(domain_id, qname, qtype);
+        //private async Task<IResponse> DeleteRecord(int domain_id, string qname, string qtype)
+        //{
+        //    try
+        //    {
+        //        string query = GetDeleteRecordQuery(domain_id, qname, qtype);
 
-                using (ExecuteResult execResult = await _rqliteService.ExecuteAsync(query))
-                {
+        //        using (ExecuteResult execResult = await _rqliteService.ExecuteAsync(query))
+        //        {
 
-                    if (execResult.Results.Any(x => x is null || x.LastInsertId <= 0))
-                    {
-                        return new BoolResponse { result = false };
-                    }
-                    else
-                    {
-                        return new BoolResponse { result = true };
-                    }
+        //            if (execResult.Results.Any(x => x is null || x.LastInsertId <= 0))
+        //            {
+        //                return new BoolResponse { result = false };
+        //            }
+        //            else
+        //            {
+        //                return new BoolResponse { result = true };
+        //            }
 
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message);
-                return new BoolResponse { Log = new List<string>() { ex.Message }, result = false };
-            }
-        }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex.Message);
+        //        return new BoolResponse { Log = new List<string>() { ex.Message }, result = false };
+        //    }
+        //}
 
         //private async Task<IResponse> UpdateRecord(Record rr, int domain_id, string qname, string qtype)
         //{

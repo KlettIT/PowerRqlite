@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using PowerRqlite.Models.PowerDNS.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,8 +7,9 @@ using System.Threading.Tasks;
 
 namespace PowerRqlite.Models.PowerDNS
 {
-    public class Record : IRecord
-    {
+    public class TransactionRecord : IRecord
+    { 
+        public TransactionMode TransactionMode { get; set; }
         public string qtype { get; set; }
         public string qname { get; set; }
         public string content { get; set; }

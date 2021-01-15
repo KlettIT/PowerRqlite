@@ -10,12 +10,12 @@ namespace PowerRqlite.Models.PowerDNS.Responses
     public class ListResponse : IResponse
     {
         private bool isDisposed;
-        public List<Record> result { get; set; } = new List<Record>();
+        public List<IRecord> result { get; set; } = new List<IRecord>();
         public List<string> Log { get; set; }
         public static ListResponse FromValues (IList<IList<object>> Values)
         {
 
-            List<Record> records = new List<Record>();
+            List<IRecord> records = new List<IRecord>();
 
             if (Values != null)
             {
