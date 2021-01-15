@@ -23,31 +23,6 @@ namespace PowerRqlite.Services.rqlite
             _logger = logger;
 
             _httpClient.BaseAddress = new Uri(rqliteContext.rqliteUrl);
-
-            //try
-            //{
-            //    var result = _httpClient.GetAsync("status").GetAwaiter().GetResult();
-            //    result.EnsureSuccessStatusCode();
-            //    var status = Status.FromJson(result.Content.ReadAsStringAsync().GetAwaiter().GetResult());
-
-            //    if (status != null && status.Http != null && !string.IsNullOrEmpty(status.Http.Redirect))
-            //    {
-            //        if (_httpClient.BaseAddress.Authority != new Uri($"http://{status.Http.Redirect}").Host)
-            //        {
-            //            _logger.LogInformation($"Replacing rqlite Url with Leader Address http://{status.Http.Redirect}");
-
-            //            configRoot.GetSection("root").
-
-            //            _httpClient.BaseAddress = new Uri($"http://{status.Http.Redirect}");
-            //        }
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    _logger.LogError($"Failed to connect to rqlite Database => {ex.Message}");
-            //}
-
-
         }
 
         public async Task<QueryResult> QueryAsync(string query, ReadConsistencyLevel readConsistencyLevel = ReadConsistencyLevel.Weak, string overwriteUrl = null)

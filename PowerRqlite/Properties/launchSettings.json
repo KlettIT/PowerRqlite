@@ -20,7 +20,7 @@
     "PowerRqlite": {
       "commandName": "Project",
       "launchBrowser": true,
-      "launchUrl": "PowerDNS/list/24/razor.k-sys.io.",
+      "launchUrl": "PowerDNS/lookup/_ldap._tcp.pdc._msdcs.RAZOR.K-SYS.IO./SRV",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },

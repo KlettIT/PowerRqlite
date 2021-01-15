@@ -8,7 +8,6 @@ namespace PowerRqlite.Models.rqlite
 {
     public class rqliteContext : IrqliteContext
     {
-
         public string rqliteUrl { get; }
 
         public rqliteContext(IOptions<rqliteOptions> options)
