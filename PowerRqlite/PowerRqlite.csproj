@@ -6,6 +6,7 @@
     <UserSecretsId>bed0f15a-46a7-42fd-b370-cf8fb8dd3589</UserSecretsId>
     <Company>Klett IT GmbH</Company>
     <Authors>Tim Hofmann</Authors>
+    <ApplicationIcon>PowerRqlite.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
