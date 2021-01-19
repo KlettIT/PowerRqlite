@@ -31,6 +31,9 @@ A simple deployment could be look like this:
 ## Known Issues
 
 * Domains can not be created via pdnsutil. This have to be done via sql.
+  ```
+  INSERT INTO domains (name,master,last_check,type,notified_serial,account) VALUES('example.com','',NULL,'NATIVE',NULL,'');
+  ```
 
 ## Quick Start
 
@@ -123,7 +126,6 @@ CREATE UNIQUE INDEX namealgoindex ON tsigkeys(name, algorithm);
 COMMIT;
 ```
 
-
 ### PowerDNS
 
 Install PowerDNS Authoritative a documented [here](https://doc.powerdns.com/authoritative/installation.html).
@@ -135,8 +137,6 @@ Once installed we need to configure the remote-backend. To do this edit the `pdn
 launch=remote
 remote-connection-string=http:url=http://127.0.0.1:5000/PowerDNS,timeout=20000
 ```
-
-For this Quick Start guide we assume you have a running rqlite instance (or cluster) which can be accessed via the rqlite command line tool. You should also have a running PowerDNS Authoritative Server. For simplicity we assume all the services are running on the same Node.
 
 ### PowerRqlite
 
