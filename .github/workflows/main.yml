@@ -25,8 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2 # Checking out the repo
-      with:
-        fetch-depth: 0
+    - run: |
+          git fetch --prune --unshallow --tags
+          echo exit code $?
+          git tag --list
 
     - name: Build and Publish latest Docker image
       uses: VaultVulp/gp-docker-action@1.1.7
@@ -55,8 +57,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+      - run: |
+          git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+          echo exit code $?
+          git tag --list
 
       - name: Setup dotnet
         uses: actions/setup-dotnet@v1.7.2
