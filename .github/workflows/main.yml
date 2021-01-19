@@ -31,7 +31,6 @@ jobs:
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }} # Provide GITHUB_TOKEN to login into the GitHub Packages
         image-name: PowerRqlite # Provide only Docker image name, tag will be automatically set to latest
-        extract-git-tag: true
         dockerfile: PowerRqlite/Dockerfile
 
   release:
@@ -62,7 +61,8 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          tag=$(git describe --tags --abbrev=0)
+          tagOrginal=$(git describe --tags --abbrev=0)
+          tag="1.0.1"
           release_name="PowerRqlite-$tag-${{ matrix.target }}"
           # Build everything
           dotnet publish PowerRqlite/PowerRqlite.csproj --self-contained --framework netcoreapp3.1 --runtime "${{ matrix.target }}" -c Release -o "$release_name"
