@@ -307,9 +307,34 @@ namespace PowerRqlite.Controllers
 
         // GET PowerDNS/searchRecords?q=www.example*&maxResults=100
         [HttpGet("searchRecords")]
-        public IResponse searchRecords(string q, int maxResults)
+        public async Task<IResponse> searchRecords(string q, int maxResults)
         {
-            return new BoolResponse { Log = new List<string>() { "Not implemented" }, result = false };
+
+            try
+            {
+                using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name) LIKE '{q.ToLower().Replace("*", "%")}'", ReadConsistencyLevel.None))
+                {
+                    var response = LookupResponse.FromValues(queryResult.Results.FirstOrDefault().Values);
+
+                    if (response != null && response.result.Count > maxResults)
+                    {
+                        response.result = response.result.Take(maxResults).ToList();
+                    }
+
+                    return response;
+
+                }
+            }
+            catch (NoValuesException)
+            {
+                _logger.LogDebug($"No record found for {q}");
+                return new BoolResponse { result = false };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                return new BoolResponse { Log = new List<string>() { $"Failed to search for {q}" }, result = false };
+            }
         }
 
         // GET PowerDNS/getUpdatedMasters
