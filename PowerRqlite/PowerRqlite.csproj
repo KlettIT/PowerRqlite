@@ -7,10 +7,20 @@
     <Company>Klett IT GmbH</Company>
     <Authors>Tim Hofmann</Authors>
     <ApplicationIcon>PowerRqlite.ico</ApplicationIcon>
+    <Version>1.0.1</Version>
+    <RepositoryUrl>https://github.com/KlettIT/PowerRqlite</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/KlettIT/PowerRqlite</PackageProjectUrl>
+    <PackageIcon>logo.png</PackageIcon>
+    <RepositoryType>Git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="..\.editorconfig" Link=".editorconfig" />
+    <None Include="Resources\logo.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
   
   <ItemGroup>
