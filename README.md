@@ -2,7 +2,9 @@
 
 *PowerRqlite* is a small [PowerDNS Authoritative](https://powerdns.com) backend which allows to use a [rqlite](https://github.com/rqlite/rqlite) cluster as database / storage.
 
-[![CodeFactor](https://www.codefactor.io/repository/github/klettit/powerrqlite/badge/master)](https://www.codefactor.io/repository/github/klettit/powerrqlite/overview/master)
+![CodeFactor Grade](https://img.shields.io/codefactor/grade/github/KlettIT/PowerRqlite/master?style=plastic)
+![GitHub](https://img.shields.io/github/license/KlettIT/PowerRqlite?style=plastic)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/KlettIT/PowerRqlite/CI?style=plastic)
 
 ## How it works
 
