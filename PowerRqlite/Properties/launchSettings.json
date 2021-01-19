@@ -22,7 +22,8 @@
       "launchBrowser": true,
       "launchUrl": "PowerDNS/lookup/_ldap._tcp.pdc._msdcs.RAZOR.K-SYS.IO./SRV",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_Kestrel__EndPoints__Http__Url": "http://localhost:1338"
       },
       "applicationUrl": "http://localhost:5000"
     },
