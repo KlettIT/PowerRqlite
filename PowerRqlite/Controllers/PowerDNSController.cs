@@ -640,11 +640,6 @@ namespace PowerRqlite.Controllers
             return $"INSERT INTO records (domain_id,name,type,content,ttl,disabled,ordername,auth) VALUES ({rr.domain_id},'{rr.qname}','{rr.qtype}','{rr.content}',{rr.ttl},{rr.disabled},NULL,{rr.auth})";
         }
 
-        //private string GetUpdateRecordQuery(Record rr, int domain_id, string qname, string qtype)
-        //{
-        //    return $"UPDATE records SET name='{rr.qname}',type='{rr.qtype}',content='{rr.content}',ttl={rr.ttl},disabled={rr.disabled},auth={rr.auth} WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}' AND content='{rr.content}')";
-        //}
-
         private string GetDeleteRecordQuery(int domain_id, string qname, string qtype)
         {
             string query;
@@ -661,24 +656,6 @@ namespace PowerRqlite.Controllers
             return query;
         }
 
-        //private async Task<bool> RecordExists(int domain_id,string qname,string qtype, string content = null)
-        //{
-
-        //    string query = string.IsNullOrWhiteSpace(content) ? $"SELECT name FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}')" : $"SELECT name FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}' AND content='{content}')";
-
-        //    using (QueryResult queryResult = await _rqliteService.QueryAsync(query))
-        //    {
-        //        if (queryResult.Results.FirstOrDefault().Values is null || queryResult.Results.FirstOrDefault().Values.Count == 0)
-        //        {
-        //            return false;
-        //        }
-        //        else
-        //        {
-        //            return true;
-        //        }
-        //    }
-        //}
-
         private async Task<int> GetDomainID(string domainname)
         {
             using (QueryResult queryResult = await _rqliteService.QueryAsync($"SELECT id FROM domains WHERE LOWER(name)='{domainname.ToLower()}'"))
@@ -694,61 +671,6 @@ namespace PowerRqlite.Controllers
                 }
             }
         }
-
-        //private async Task<IResponse> DeleteRecord(int domain_id, string qname, string qtype)
-        //{
-        //    try
-        //    {
-        //        string query = GetDeleteRecordQuery(domain_id, qname, qtype);
-
-        //        using (ExecuteResult execResult = await _rqliteService.ExecuteAsync(query))
-        //        {
-
-        //            if (execResult.Results.Any(x => x is null || x.LastInsertId <= 0))
-        //            {
-        //                return new BoolResponse { result = false };
-        //            }
-        //            else
-        //            {
-        //                return new BoolResponse { result = true };
-        //            }
-
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return new BoolResponse { Log = new List<string>() { ex.Message }, result = false };
-        //    }
-        //}
-
-        //private async Task<IResponse> UpdateRecord(Record rr, int domain_id, string qname, string qtype)
-        //{
-        //    try
-        //    {
-
-        //        string query = GetUpdateRecordQuery(rr, domain_id, qname, qtype);
-
-        //        using (ExecuteResult execResult = await _rqliteService.ExecuteAsync(query))
-        //        {
-
-        //            if (execResult.Results.Any(x => x is null || x.LastInsertId <= 0))
-        //            {
-        //                return new BoolResponse { result = false };
-        //            }
-        //            else
-        //            {
-        //                return new BoolResponse { result = true };
-        //            }
-
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex.Message);
-        //        return new BoolResponse { Log = new List<string>() { ex.Message }, result = false };
-        //    }
-        //}
 
         private async Task<IResponse> InsertRecord(Record rr)
         {
