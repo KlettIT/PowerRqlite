@@ -23,7 +23,6 @@ jobs:
   docker:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-    if: contains(github.ref, 'tags/v') # works only version tagged
     steps:
     - uses: actions/checkout@v2 # Checking out the repo
 
@@ -51,7 +50,6 @@ jobs:
             os: macos-latest
             target: osx-x64
     runs-on: ${{ matrix.os }}
-    if: contains(github.ref, 'tags/v') # works only version tagged
     steps:
       - name: Checkout
         uses: actions/checkout@v1
@@ -65,7 +63,7 @@ jobs:
         shell: bash
         run: |
           tag=$(git describe --tags --abbrev=0)
-          release_name="App-$tag-${{ matrix.target }}"
+          release_name="PowerRqlite-$tag-${{ matrix.target }}"
           # Build everything
           dotnet publish PowerRqlite/PowerRqlite.csproj --self-contained --framework netcoreapp3.1 --runtime "${{ matrix.target }}" -c Release -o "$release_name"
           # Pack files
