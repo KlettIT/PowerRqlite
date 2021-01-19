@@ -1,0 +1,1 @@
+[PowerRqlite]: https://git.services.k-sys.io/K-SYS.IO/PowerRqlite/src/branch/master/PowerRqlite/Resources/logo-text.png "PowerRqlite"
