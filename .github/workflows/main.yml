@@ -20,11 +20,10 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  build:
+  docker:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     if: contains(github.ref, 'tags/v') # works only version tagged
-
     steps:
     - uses: actions/checkout@v2 # Checking out the repo
 
@@ -35,6 +34,7 @@ jobs:
         image-name: PowerRqlite # Provide only Docker image name, tag will be automatically set to latest
         extract-git-tag: true
         dockerfile: PowerRqlite/Dockerfile
+
   release:
     name: Release
     strategy:
