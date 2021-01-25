@@ -21,7 +21,7 @@ A simple deployment could be look like this:
 ## Prerequisites
 
 * .NET Core 3.1 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
-* [rqrlite Cluster](https://github.com/rqlite/rqlite/blob/master/DOC/CLUSTER_MGMT.md)
+* [rqlite Cluster](https://github.com/rqlite/rqlite/blob/master/DOC/CLUSTER_MGMT.md)
 * PowerDNS Authoritative 4.3.x or higher
 
 *PowerRqlite* can be used for the following DNS Modes of Operation:
