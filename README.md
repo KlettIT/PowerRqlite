@@ -36,7 +36,7 @@ A simple deployment could be look like this:
 
 * Domains can not be created via pdnsutil. This have to be done via sql.
   ```
-  INSERT INTO domains (name,master,last_check,type,notified_serial,account) VALUES('example.com','',NULL,'NATIVE',NULL,'');
+  INSERT INTO domains (name,master,last_check,type,notified_serial,account) VALUES('example.com.','',NULL,'NATIVE',NULL,'');
   ```
 
 ## Quick Start
