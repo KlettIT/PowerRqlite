@@ -19,7 +19,7 @@ A simple deployment could be look like this:
 
 ## Prerequisites
 
-* .NET Core 3.1 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
+* .NET 8 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
 * [rqrlite Cluster](https://github.com/rqlite/rqlite/blob/master/DOC/CLUSTER_MGMT.md)
 * PowerDNS Authoritative 4.3.x or higher
 
@@ -89,11 +89,11 @@ If you running *PowerRqlite* as a Docker container you can use Environment varia
   "Kestrel": {
     "EndPoints": {
       "Http": {
-        "Url": "http://localhost:8081"
+        "Url": "http://localhost:5555"
       }
     }
   }
 }
 ```
 
-Translated into "Docker" it would be the following environment variable: `ASPNETCORE_Kestrel__EndPoints__Http__Url=http://localhost:8081`
+Translated into "Docker" it would be the following environment variable: `ASPNETCORE_Kestrel__EndPoints__Http__Url=http://localhost:5555`
