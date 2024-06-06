@@ -1,4 +1,4 @@
-![PowerRqlite](PowerRqlite/Resources/logo-text.png)
+![PowerRqlite](Resources/logo-text.png)
 
 *PowerRqlite* is a small [PowerDNS Authoritative](https://powerdns.com) backend which allows to use a [rqlite](https://github.com/rqlite/rqlite) cluster as database / storage.
 
