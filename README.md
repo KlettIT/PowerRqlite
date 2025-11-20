@@ -19,7 +19,7 @@ A simple deployment could be look like this:
 
 ## Prerequisites
 
-* .NET 8 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
+* .NET 10 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
 * [rqrlite Cluster](https://github.com/rqlite/rqlite/blob/master/DOC/CLUSTER_MGMT.md)
 * PowerDNS Authoritative 4.3.x or higher
 
