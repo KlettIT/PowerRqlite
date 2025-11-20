@@ -13,15 +13,7 @@ namespace PowerRqlite.Models.PowerDNS.Responses
 
         public static StringArrayResponse FromValues(List<List<JsonElement>>? Values)
         {
-            if (Values != null)
-            {
-                return new StringArrayResponse() { Result = Values.SelectMany(x => x.Where(w => w.ValueKind == JsonValueKind.String).Select(y => y.GetString())).Cast<string>().ToList() };
-
-            }
-            else
-            {
-                throw new NoValuesException();
-            }
+            return Values != null ? new StringArrayResponse() { Result = Values.SelectMany(x => x.Where(w => w.ValueKind == JsonValueKind.String).Select(y => y.GetString())).Cast<string>().ToList() } : throw new NoValuesException();
         }
     }
 }

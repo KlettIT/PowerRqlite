@@ -17,18 +17,15 @@ namespace PowerRqlite.Models.PowerDNS.Responses
 
             if (Values != null)
             {
-                records.AddRange(Values.AsParallel().Select(value =>
+                records.AddRange(Values.AsParallel().Select(value => new Record()
                 {
-                    return new Record()
-                    {
-                        DomainId = value[0].ValueKind == JsonValueKind.Number ? value[0].GetInt32() : -1,
-                        QName = value[1].ValueKind == JsonValueKind.String ? value[1].GetString()! : string.Empty,
-                        QType = value[2].ValueKind == JsonValueKind.String ? value[2].GetString()! : string.Empty,
-                        Content = value[3].ValueKind == JsonValueKind.String ? value[3].GetString()! : string.Empty,
-                        TTL = value[4].ValueKind == JsonValueKind.Number ? value[4].GetInt32() : 0,
-                        Disabled = value[5].ValueKind == JsonValueKind.Number && Convert.ToBoolean(value[5].GetInt32()),
-                        Auth = value[6].ValueKind == JsonValueKind.Number ? value[6].GetInt32() : 0,
-                    };
+                    DomainId = value[0].ValueKind == JsonValueKind.Number ? value[0].GetInt32() : -1,
+                    QName = value[1].ValueKind == JsonValueKind.String ? value[1].GetString()! : string.Empty,
+                    QType = value[2].ValueKind == JsonValueKind.String ? value[2].GetString()! : string.Empty,
+                    Content = value[3].ValueKind == JsonValueKind.String ? value[3].GetString()! : string.Empty,
+                    TTL = value[4].ValueKind == JsonValueKind.Number ? value[4].GetInt32() : 0,
+                    Disabled = value[5].ValueKind == JsonValueKind.Number && Convert.ToBoolean(value[5].GetInt32()),
+                    Auth = value[6].ValueKind == JsonValueKind.Number ? value[6].GetInt32() : 0,
                 }).ToList());
 
                 return new ListResponse() { Result = records };

@@ -38,7 +38,7 @@ namespace PowerRqlite.Models.PowerDNS.Responses
         {
             if (Values != null)
             {
-                var value = Values[0];
+                List<JsonElement> value = Values[0];
 
                 return FromValues(value);
             }

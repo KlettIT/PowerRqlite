@@ -25,7 +25,7 @@ namespace PowerRqlite.Services.rqlite
 
         public async Task<QueryResult> QueryAsync(string query, ReadConsistencyLevel readConsistencyLevel = ReadConsistencyLevel.Weak)
         {
-            var result = await baseUrl.AppendPathSegments("db", "query")
+            IFlurlResponse? result = await baseUrl.AppendPathSegments("db", "query")
                 .AppendQueryParam("level", readConsistencyLevel)
                 .PostJsonAsync(new string[] { query });
 
@@ -35,7 +35,7 @@ namespace PowerRqlite.Services.rqlite
         public async Task<ExecuteResult> ExecuteAsync(string query)
         {
 
-            var result = await baseUrl.AppendPathSegments("db", "execute")
+            IFlurlResponse? result = await baseUrl.AppendPathSegments("db", "execute")
                 .PostJsonAsync(new string[] { query });
 
             return await result.GetJsonAsync<ExecuteResult>();
@@ -44,7 +44,7 @@ namespace PowerRqlite.Services.rqlite
         public async Task<ExecuteResult> ExecuteBulkAsync(List<string> querys)
         {
 
-            var result = await baseUrl.AppendPathSegments("db", "execute")
+            IFlurlResponse? result = await baseUrl.AppendPathSegments("db", "execute")
                 .AppendQueryParam("transaction")
                 .PostJsonAsync(querys.ToArray());
 

@@ -16,8 +16,8 @@ namespace PowerRqlite.Models.PowerDNS.Responses
         {
             if (Values != null)
             {
-                var domains = Values.AsParallel().AsOrdered().Select(DomainInfoResponse.FromValues)
-                    .Where(x => x != null && x.Result != null)
+                List<DomainInfo> domains = Values.AsParallel().AsOrdered().Select(DomainInfoResponse.FromValues)
+                    .Where(x => x.Result != null)
                     .Select(y => y!.Result)
                     .Cast<DomainInfo>().ToList();
 

@@ -1,4 +1,5 @@
 ﻿
+using PowerRqlite.Models.rqlite;
 using PowerRqlite.Services.rqlite;
 using Serilog;
 
@@ -79,7 +80,7 @@ namespace PowerRqlite.Services
             try
             {
                 Log.Debug("Check if we have a empty/new database...");
-                var result = await _rqliteService.QueryAsync("SELECT name FROM sqlite_master WHERE type='table'");
+                QueryResult? result = await _rqliteService.QueryAsync("SELECT name FROM sqlite_master WHERE type='table'");
 
                 if (result?.Results?[0].Values is null)
                 {

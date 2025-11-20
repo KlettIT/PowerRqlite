@@ -7,7 +7,7 @@ using PowerRqlite.Services.PowerDNS;
 using PowerRqlite.Services.rqlite;
 using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Host.UseSerilog((context, configuration) =>

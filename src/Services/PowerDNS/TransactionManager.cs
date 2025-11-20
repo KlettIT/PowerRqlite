@@ -21,7 +21,7 @@ namespace PowerRqlite.Services.PowerDNS
         {
             lock (_lock)
             {
-                var transaction = new Transaction() { Id = id, DomainId = domain_id, Domain = domain };
+                Transaction transaction = new Transaction() { Id = id, DomainId = domain_id, Domain = domain };
 
                 if (!transactions.Exists(x => x.Id == id))
                 {
@@ -41,7 +41,7 @@ namespace PowerRqlite.Services.PowerDNS
             lock (_lock)
             {
 
-                Transaction transaction = transactions.First(x => x.Id == id);
+                Transaction? transaction = transactions.FirstOrDefault(x => x.Id == id);
 
                 if (transaction != null)
                 {
@@ -62,7 +62,7 @@ namespace PowerRqlite.Services.PowerDNS
             lock (_lock)
             {
 
-                Transaction transaction = transactions.First(x => x.Id == id);
+                Transaction? transaction = transactions.FirstOrDefault(x => x.Id == id);
 
                 if (transaction != null)
                 {
@@ -83,16 +83,9 @@ namespace PowerRqlite.Services.PowerDNS
 
             lock (_lock)
             {
-                Transaction transaction = transactions.First(x => x.Id == id);
+                Transaction? transaction = transactions.FirstOrDefault(x => x.Id == id);
 
-                if (transaction != null)
-                {
-                    return transaction;
-                }
-                else
-                {
-                    throw new InvalidOperationException("Transaction does not exist!");
-                }
+                return transaction ?? throw new InvalidOperationException("Transaction does not exist!");
             }
         }
 
@@ -118,7 +111,7 @@ namespace PowerRqlite.Services.PowerDNS
 
             lock (_lock)
             {
-                Transaction transaction = transactions.First(x => x.Id == id);
+                Transaction? transaction = transactions.FirstOrDefault(x => x.Id == id);
 
                 if (transaction != null)
                 {
@@ -136,16 +129,9 @@ namespace PowerRqlite.Services.PowerDNS
         {
             lock (_lock)
             {
-                Transaction transaction = transactions.First(x => x.Id == id);
+                Transaction? transaction = transactions.FirstOrDefault(x => x.Id == id);
 
-                if (transaction != null)
-                {
-                    return transaction.Queries;
-                }
-                else
-                {
-                    throw new InvalidOperationException("Transaction does not exist!");
-                }
+                return transaction != null ? transaction.Queries : throw new InvalidOperationException("Transaction does not exist!");
             }
         }
 
@@ -155,14 +141,7 @@ namespace PowerRqlite.Services.PowerDNS
             {
                 Transaction transaction = transactions.First(x => x.Domain.Equals(domain,StringComparison.OrdinalIgnoreCase));
 
-                if (transaction != null)
-                {
-                    return transaction.Queries;
-                }
-                else
-                {
-                    throw new InvalidOperationException("Transaction does not exist!");
-                }
+                return transaction != null ? transaction.Queries : throw new InvalidOperationException("Transaction does not exist!");
             }
         }
 
@@ -170,7 +149,7 @@ namespace PowerRqlite.Services.PowerDNS
         {
             lock (_lock)
             {
-                var transaction = transactions.LastOrDefault(x => x.Records.Exists(y => y.QName.Equals(qname,StringComparison.OrdinalIgnoreCase) && y.QType == qtype));
+                Transaction? transaction = transactions.LastOrDefault(x => x.Records.Exists(y => y.QName.Equals(qname,StringComparison.OrdinalIgnoreCase) && y.QType == qtype));
 
                 if (transaction != null)
                 {
