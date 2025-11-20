@@ -15,7 +15,7 @@ namespace PowerRqlite.Interfaces.PowerDNS
         [JsonPropertyName("domain_id")]
         public int DomainId { get; set; }
         [JsonPropertyName("auth")]
-        public bool Auth { get; set; }
+        public int Auth { get; set; }
         [JsonPropertyName("disabled")]
         public bool Disabled { get; set; }
     }

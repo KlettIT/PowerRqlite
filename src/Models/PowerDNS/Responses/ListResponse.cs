@@ -27,7 +27,7 @@ namespace PowerRqlite.Models.PowerDNS.Responses
                         Content = value[3].ValueKind == JsonValueKind.String ? value[3].GetString()! : string.Empty,
                         TTL = value[4].ValueKind == JsonValueKind.Number ? value[4].GetInt32() : 0,
                         Disabled = value[5].ValueKind == JsonValueKind.Number && Convert.ToBoolean(value[5].GetInt32()),
-                        Auth = value[6].ValueKind != JsonValueKind.Number || Convert.ToBoolean(value[6].GetInt32()),
+                        Auth = value[6].ValueKind == JsonValueKind.Number ? value[6].GetInt32() : 0,
                     };
                 }).ToList());
 

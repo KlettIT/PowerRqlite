@@ -23,7 +23,7 @@ namespace PowerRqlite.Models.PowerDNS
         public required int DomainId { get; set; } = -1;
 
         [JsonPropertyName("auth")]
-        public bool Auth { get; set; } = true;
+        public int Auth { get; set; } = 1;
 
         [JsonPropertyName("disabled")]
         public bool Disabled { get; set; } = false;
