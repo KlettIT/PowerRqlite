@@ -2,7 +2,7 @@
 #
 #   docker compose -f tests/docker/docker-compose.yml up --build
 #
-#   PowerDNS 5.1 by default; PDNS_IMAGE=powerdns/pdns-auth-49:latest for 4.9.
+#   PowerDNS 5.1 by default; PDNS_IMAGE=powerdns/pdns-auth-49:4.9.17 for 4.9.
 #
 #   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil backend-cmd remote "create-zone example.test ns1.example.test"
 #   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil add-record example.test www.example.test A 300 192.0.2.1
@@ -11,7 +11,7 @@
 
 services:
   rqlite:
-    image: rqlite/rqlite:latest
+    image: rqlite/rqlite:10.6.0
     ports:
       - "127.0.0.1:4001:4001"
 
@@ -32,5 +32,6 @@ services:
     ports:
       - "127.0.0.1:1053:53/udp"
       - "127.0.0.1:1053:53/tcp"
+      - "127.0.0.1:8081:8081"
     depends_on:
       - powerrqlite

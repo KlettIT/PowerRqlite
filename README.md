@@ -43,7 +43,8 @@ A simple deployment could be look like this:
 * The remote backend module has no zone-creation method either, so PowerRqlite creates a zone
   the first time PowerDNS asks for its domain info (that is what makes `pdnsutil create-zone` work on PowerDNS 4.x).
   Anything else that makes PowerDNS ask for an unknown zone creates an empty zone too, for example a
-  DNS UPDATE from a client allowed by `allow-dnsupdate-from`. Keep that list (or TSIG) tight.
+  DNS UPDATE from a client allowed by `allow-dnsupdate-from`. Keep that list (or TSIG) tight, or turn
+  this off with `PowerRqlite:AutoCreateZones` (see [Configuration](#configuration)); on PowerDNS 5.x it is not needed.
 * PowerDNS 5.x refuses `pdnsutil create-zone` (and `load-zone`, `create-secondary-zone`, `zone copy`) for the
   remote backend ("None of the configured backends support zone creation"). Create a zone with:
   ```
@@ -52,6 +53,12 @@ A simple deployment could be look like this:
   This also completes a zone that a failed `pdnsutil create-zone` left behind without SOA.
 * `pdnsutil` 5.x takes absolute record names: `pdnsutil add-record example.com www.example.com A 300 192.0.2.1`
   (4.x: `www`).
+* Transactions (`pdnsutil` edits, DNS UPDATE, Web API changes) are held in the memory of the PowerRqlite instance
+  that received `startTransaction`. Every PowerDNS server must therefore always talk to the same PowerRqlite
+  instance, as in the deployments above (one PowerRqlite next to each PowerDNS). Do not put a round-robin load
+  balancer between PowerDNS and several PowerRqlite instances.
+* The remote backend never tells PowerRqlite whether disabled records are wanted. DNS lookups never return
+  disabled records; zone listings (AXFR, `pdnsutil list-zone`, Web API) and Web API lookups include them.
 
 
 ## Quick Start
@@ -113,6 +120,27 @@ If you running *PowerRqlite* as a Docker container you can use Environment varia
 
 Translated into "Docker" it would be the following environment variable: `ASPNETCORE_Kestrel__EndPoints__Http__Url=http://localhost:5555`
 
+### Automatic zone creation
+
+By default *PowerRqlite* creates a zone the first time PowerDNS asks for an unknown one (needed for `pdnsutil create-zone` on PowerDNS 4.x).
+To turn it off, for example on PowerDNS 5.x where zones are created with `pdnsutil backend-cmd remote "create-zone ..."`:
+
+```
+{
+...
+  "PowerRqlite": {
+    "AutoCreateZones": false
+  }
+}
+```
+
+Docker: `PowerRqlite__AutoCreateZones=false`
+
+### Health check
+
+`GET /health` answers `Healthy` (HTTP 200) when rqlite can be queried, otherwise `Unhealthy` (HTTP 503).
+Use it for load balancer, Docker or Kubernetes health checks.
+
 ## Tests
 
 The tests need the .NET 10 SDK and a running Docker; rqlite, PowerDNS and the DNS tools are started with Testcontainers.
@@ -124,7 +152,7 @@ dotnet test tests/PowerRqlite.Tests
 PowerDNS 5.1 is tested by default; `PDNS_IMAGE` selects another image (CI runs 4.9 and 5.1):
 
 ```
-PDNS_IMAGE=powerdns/pdns-auth-49:latest dotnet test tests/PowerRqlite.Tests
+PDNS_IMAGE=powerdns/pdns-auth-49:4.9.17 dotnet test tests/PowerRqlite.Tests
 ```
 
 The end-to-end tests drive a real PowerDNS with `pdnsutil`, `dig` and `nsupdate`. The same setup can be started by hand:

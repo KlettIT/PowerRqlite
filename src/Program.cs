@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.HttpLogging;
 using PowerRqlite.Interfaces;
 using PowerRqlite.Interfaces.rqlite;
+using PowerRqlite.Models;
 using PowerRqlite.Models.rqlite;
 using PowerRqlite.Services;
 using PowerRqlite.Services.PowerDNS;
@@ -14,10 +15,12 @@ builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
 
 builder.Services.Configure<RqliteOptions>(builder.Configuration.GetSection("rqliteOptions"));
+builder.Services.Configure<PowerRqliteOptions>(builder.Configuration.GetSection("PowerRqlite"));
 builder.Services.AddSingleton<IRqliteContext, RqliteContext>();
 builder.Services.AddSingleton<ITransactionManager, TransactionManager>();
 builder.Services.AddSingleton<IRqliteService, RqliteService>();
 builder.Services.AddHostedService<InitService>();
+builder.Services.AddHealthChecks().AddCheck<RqliteHealthCheck>("rqlite");
 
 builder.Services.AddHttpLogging(o => { o.LoggingFields = HttpLoggingFields.All; });
 
@@ -29,6 +32,7 @@ app.UseHttpLogging();
 app.UseSerilogRequestLogging();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 await app.StartAsync();
 
 Log.Information("Hosting environment: {HostingEnv}", app.Environment.EnvironmentName);

@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using DotNet.Testcontainers.Containers;
 using Xunit;
 
@@ -109,6 +111,36 @@ namespace PowerRqlite.Tests
 
             await Ok(stack.Pdnsutil("delete-rrset", zone, "www", "A"));
             Assert.Empty(await DigShort($"www.{zone}", "A"));
+        }
+
+        [Fact]
+        public async Task WebApi_PatchRrset_IsReadBackServedAndChecked()
+        {
+            // PowerDNS 5.x reads RRsets through APILookup: for the rrset_name filter and for the checks of an RRset edit.
+            string zone = await CreateZone();
+            using HttpClient api = stack.Api();
+
+            Task<HttpResponseMessage> Patch(string name, string type, params string[] contents) =>
+                api.PatchAsync($"zones/{zone}.", new StringContent(JsonSerializer.Serialize(new
+                {
+                    rrsets = new[]
+                    {
+                        new { name = $"{name}.{zone}.", type, ttl = 300, changetype = "REPLACE", records = contents.Select(c => new { content = c, disabled = false }) },
+                    },
+                }), Encoding.UTF8, "application/json"));
+
+            HttpResponseMessage response = await Patch("www", "A", "192.0.2.20", "192.0.2.21");
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+
+            Assert.Equal([("300", "192.0.2.20"), ("300", "192.0.2.21")], await DigAnswers($"www.{zone}", "A"));
+
+            JsonElement read = JsonDocument.Parse(await api.GetStringAsync($"zones/{zone}.?rrset_name=www.{zone}.&rrset_type=A")).RootElement;
+            JsonElement rrset = Assert.Single(read.GetProperty("rrsets").EnumerateArray());
+            Assert.Equal(["192.0.2.20", "192.0.2.21"], rrset.GetProperty("records").EnumerateArray().Select(r => r.GetProperty("content").GetString()).Order());
+
+            // A CNAME next to existing records must be refused; PowerDNS only sees them through APILookup (5.x).
+            HttpResponseMessage conflict = await Patch("www", "CNAME", $"target.{zone}.");
+            Assert.False(conflict.IsSuccessStatusCode, await conflict.Content.ReadAsStringAsync());
         }
 
         [Fact]

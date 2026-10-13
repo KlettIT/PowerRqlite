@@ -35,11 +35,30 @@ namespace PowerRqlite.Tests
         public void GetRecordsQuery_LikeWildcard_ValueStaysData()
         {
             // The query builder itself does not transform wildcards; that's done by the caller
-            // (SearchRecords replaces '*' with '%'). The parameter value stays as-is here.
+            // (SearchRecords uses LikePattern). The parameter value stays as-is here.
             var entry = PowerDnsController.GetRecordsQuery(name: "www.example*", matchOperator: "LIKE");
 
-            Assert.Equal("SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name) LIKE ?", entry.Sql);
+            Assert.Equal("SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name) LIKE ? ESCAPE '\\'", entry.Sql);
             Assert.Equal(["www.example*"], entry.Args);
+        }
+
+        [Theory]
+        [InlineData("www.example*", "www.example%")]
+        [InlineData("_sip._tcp*", "\\_sip.\\_tcp%")]
+        [InlineData("100%*", "100\\%%")]
+        [InlineData("a\\b", "a\\\\b")]
+        public void LikePattern_OnlyStarIsAWildcard(string q, string expected)
+        {
+            Assert.Equal(expected, PowerDnsController.LikePattern(q));
+        }
+
+        [Fact]
+        public void GetRecordsQuery_ExcludeDisabledAndLimit()
+        {
+            var entry = PowerDnsController.GetRecordsQuery(name: "www.example.com.", includeDisabled: false, limit: 10);
+
+            Assert.Equal("SELECT domain_id,name,type,content,ttl,disabled,auth FROM records WHERE LOWER(name) = ? AND COALESCE(disabled, 0) = 0 LIMIT ?", entry.Sql);
+            Assert.Equal(["www.example.com.", 10], entry.Args);
         }
 
         [Fact]
