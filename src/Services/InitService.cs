@@ -76,7 +76,17 @@ namespace PowerRqlite.Services
         ];
 
         /// <summary>
-        /// Deploys the schema once into an empty database. Idempotent.
+        /// Created on every start, so databases deployed before an index existed get it too.
+        /// records_lname_type matches the LOWER(name) lookups; without it every DNS lookup scans all records.
+        /// </summary>
+        public static List<string> Indexes =>
+        [
+            "CREATE INDEX IF NOT EXISTS records_lname_type ON records (LOWER(name), type);",
+            "CREATE INDEX IF NOT EXISTS records_domain_id ON records (domain_id);",
+        ];
+
+        /// <summary>
+        /// Deploys the schema once into an empty database, then makes sure all indexes exist. Idempotent.
         /// </summary>
         public static async Task DeployAsync(IRqliteService rqliteService)
         {
@@ -93,6 +103,8 @@ namespace PowerRqlite.Services
             {
                 Log.Debug("Schema already present, nohting to do");
             }
+
+            await rqliteService.ExecuteBulkAsync(Indexes);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
