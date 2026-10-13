@@ -324,6 +324,106 @@ namespace PowerRqlite.Tests
             Assert.Equal("10.7.7.7", doc.RootElement.GetProperty("result")[0].GetProperty("content").GetString());
         }
 
+        private async Task InsertRecord(string zone, string qname, string type, string content, bool disabled = false) =>
+            await fixture.Service.ExecuteAsync(
+                "INSERT INTO records (domain_id,name,type,content,ttl,disabled,auth) VALUES (?,?,?,?,300,?,1)",
+                [await DomainIdOf(zone), qname, type, content, disabled ? 1 : 0]);
+
+        [Fact]
+        public async Task Lookup_DisabledRecord_IsNotReturned_ButApiLookupShowsIt()
+        {
+            // The remote backend ignores "disabled" in lookup results, so PowerDNS would serve whatever lookup returns.
+            var zone = $"disabled-{Guid.NewGuid():N}.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+            await InsertRecord(zone, $"www.{zone}", "A", "10.8.8.1");
+            await InsertRecord(zone, $"www.{zone}", "A", "10.8.8.2", disabled: true);
+
+            var lookup = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/lookup/www.{zone}/A"));
+            Assert.Equal(["10.8.8.1"], lookup.RootElement.GetProperty("result").EnumerateArray().Select(r => r.GetProperty("content").GetString()));
+
+            var apiLookup = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/APILookup/www.{zone}/A"));
+            Assert.Equal(["10.8.8.1", "10.8.8.2"], apiLookup.RootElement.GetProperty("result").EnumerateArray().Select(r => r.GetProperty("content").GetString()).Order());
+
+            // Only disabled records left => no answer at all.
+            await InsertRecord(zone, $"off.{zone}", "A", "10.8.8.3", disabled: true);
+            var off = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/lookup/off.{zone}/ANY"));
+            Assert.False(off.RootElement.GetProperty("result").GetBoolean());
+        }
+
+        [Fact]
+        public async Task SearchRecords_Underscore_MatchesOnlyItself()
+        {
+            // Regression: '_' is a single-character wildcard in SQL LIKE.
+            var zone = $"search-us-{Guid.NewGuid():N}.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+            await InsertRecord(zone, $"_sip._tcp.{zone}", "SRV", "10 5 5060 sip.example.");
+            await InsertRecord(zone, $"xsip.xtcp.{zone}", "A", "10.8.9.1");
+
+            var doc = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/searchRecords?q={Uri.EscapeDataString($"_sip._tcp.{zone}*")}&maxResults=100"));
+            Assert.Equal([$"_sip._tcp.{zone}"], doc.RootElement.GetProperty("result").EnumerateArray().Select(r => r.GetProperty("qname").GetString()));
+        }
+
+        [Fact]
+        public async Task SearchRecords_MaxResults_LimitsResult()
+        {
+            var zone = $"search-max-{Guid.NewGuid():N}.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+            foreach (var host in new[] { "a", "b", "c" })
+            {
+                await InsertRecord(zone, $"{host}.{zone}", "A", "10.8.10.1");
+            }
+
+            var doc = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/searchRecords?q=*.{zone}&maxResults=2"));
+            Assert.Equal(2, doc.RootElement.GetProperty("result").GetArrayLength());
+        }
+
+        [Fact]
+        public async Task GetDomainInfo_AutoCreateZonesOff_DoesNotCreateZone()
+        {
+            var zone = $"noauto-{Guid.NewGuid():N}.";
+
+            await using var factory = new PowerRqliteApp(fixture.RqliteUrl, new Dictionary<string, string?> { ["PowerRqlite:AutoCreateZones"] = "false" });
+            var client = factory.CreateClient();
+
+            var doc = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}"));
+            Assert.False(doc.RootElement.GetProperty("result").GetBoolean());
+
+            var zoneCount = await fixture.Service.QueryAsync("SELECT COUNT(*) FROM domains WHERE LOWER(name) = ?", [zone]);
+            Assert.Equal(0, zoneCount.Results![0]!.Values![0][0].GetInt32());
+        }
+
+        [Fact]
+        public async Task Health_RqliteReachable_Healthy()
+        {
+            await using var factory = Factory();
+            var response = await factory.CreateClient().GetAsync("/health");
+
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+        }
+
+        [Fact]
+        public async Task Health_RqliteUnreachable_Unhealthy()
+        {
+            await using var factory = new PowerRqliteApp("http://127.0.0.1:1");
+            var response = await factory.CreateClient().GetAsync("/health");
+
+            Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("Unhealthy", await response.Content.ReadAsStringAsync());
+        }
+
         [Fact]
         public async Task Transaction_Flow_InsertDeleteCommit_IsAtomic()
         {

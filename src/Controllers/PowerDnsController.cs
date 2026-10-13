@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using PowerRqlite.Enums.rqlite;
 using PowerRqlite.Exceptions;
 using PowerRqlite.Interfaces;
 using PowerRqlite.Interfaces.PowerDNS;
+using PowerRqlite.Models;
 using PowerRqlite.Models.PowerDNS;
 using PowerRqlite.Models.PowerDNS.Responses;
 using PowerRqlite.Models.rqlite;
@@ -14,7 +16,7 @@ namespace PowerRqlite.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    public class PowerDnsController(IRqliteService rqliteService, ITransactionManager transactionManager) : ControllerBase
+    public class PowerDnsController(IRqliteService rqliteService, ITransactionManager transactionManager, IOptions<PowerRqliteOptions> options) : ControllerBase
     {
         #region "GET"
 
@@ -55,21 +57,14 @@ namespace PowerRqlite.Controllers
             try
             {
                 // PowerDNS '*' wildcard => SQL LIKE '%'. Bound as parameter, never concatenated.
-                QueryEntry query = GetRecordsQuery(name: q.Replace("*", "%"), matchOperator: "LIKE");
+                // maxResults omitted (binds to 0) means "no limit"; otherwise rqlite stops after maxResults rows.
+                QueryEntry query = GetRecordsQuery(name: LikePattern(q), matchOperator: "LIKE", limit: maxResults);
 
                 using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args, ReadConsistencyLevel.None))
                 {
                     if (queryResult.Results != null)
                     {
-                        ListResponse response = ListResponse.FromValues(queryResult.Results.FirstOrDefault()?.Values);
-
-                        // maxResults omitted (binds to 0) means "no limit" — a bound of 0 would wipe the whole result set.
-                        if (maxResults > 0 && response.Result.Count > maxResults)
-                        {
-                            response.Result = response.Result.Take(maxResults).ToList();
-                        }
-
-                        return response;
+                        return ListResponse.FromValues(queryResult.Results.FirstOrDefault()?.Values);
                     }
 
                     throw new NoValuesException();
@@ -201,8 +196,13 @@ namespace PowerRqlite.Controllers
             catch (NoValuesException)
             {
                 Log.Debug("No domaininfo records found for domain '{DomainName}'", name);
-                Log.Information("Creating new domain/zone '{DomainName}'", name);
-                await InsertDomain(name);
+
+                if (options.Value.AutoCreateZones)
+                {
+                    Log.Information("Creating new domain/zone '{DomainName}'", name);
+                    await InsertDomain(name);
+                }
+
                 return new BoolResponse { Result = false };
             }
             catch (Exception ex)
@@ -265,10 +265,17 @@ namespace PowerRqlite.Controllers
         }
 
         // GET PowerDNS/lookup/www.example.com./ANY
-        // APILookup (PowerDNS 5.x, Web API) is a lookup that may include disabled records; this lookup never filters them.
+        // The remote backend ignores the "disabled" field of a result, so disabled records must not be returned here,
+        // or PowerDNS would answer with them.
         [HttpGet("lookup/{qname}/{qtype}")]
+        public Task<IResponse> Lookup(string qtype, string qname) => Lookup(qtype, qname, includeDisabled: false);
+
+        // GET PowerDNS/APILookup/www.example.com./ANY  (PowerDNS 5.x, Web API reads and RRset edits)
+        // PowerDNS does not pass its include-disabled flag over HTTP; the Web API is shown disabled records too.
         [HttpGet("APILookup/{qname}/{qtype}")]
-        public async Task<IResponse> Lookup(string qtype, string qname)
+        public Task<IResponse> APILookup(string qtype, string qname) => Lookup(qtype, qname, includeDisabled: true);
+
+        private async Task<IResponse> Lookup(string qtype, string qname, bool includeDisabled)
         {
             try
             {
@@ -291,7 +298,7 @@ namespace PowerRqlite.Controllers
                     }
                 }
 
-                QueryEntry query = qtype == "ANY" ? GetRecordsQuery(name: qname) : GetRecordsQuery(name: qname, type: qtype);
+                QueryEntry query = GetRecordsQuery(name: qname, type: qtype == "ANY" ? null : qtype, includeDisabled: includeDisabled);
 
                 using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args, ReadConsistencyLevel.None))
                 {
@@ -740,34 +747,55 @@ namespace PowerRqlite.Controllers
 
         #region "Helper"
 
-        internal static QueryEntry GetRecordsQuery(int? domain_id = null, string? name = null, string? type = null, string matchOperator = "=")
+        internal static QueryEntry GetRecordsQuery(int? domain_id = null, string? name = null, string? type = null, string matchOperator = "=", bool includeDisabled = true, int limit = 0)
         {
             List<string> where = [];
             List<object?> args = [];
 
+            // LIKE patterns come from LikePattern(), which escapes '%', '_' and '\' with '\'.
+            string op = matchOperator == "LIKE" ? "LIKE ? ESCAPE '\\'" : $"{matchOperator} ?";
+
             if (domain_id != null)
             {
-                where.Add($"domain_id {matchOperator} ?");
+                where.Add($"domain_id {op}");
                 args.Add(domain_id);
             }
 
             if (!string.IsNullOrEmpty(name))
             {
-                where.Add($"LOWER(name) {matchOperator} ?");
+                where.Add($"LOWER(name) {op}");
                 args.Add(name.ToLower());
             }
 
             if (!string.IsNullOrEmpty(type))
             {
-                where.Add($"type {matchOperator} ?");
+                where.Add($"type {op}");
                 args.Add(type);
+            }
+
+            if (!includeDisabled)
+            {
+                where.Add("COALESCE(disabled, 0) = 0");
             }
 
             string sql = "SELECT domain_id,name,type,content,ttl,disabled,auth FROM records";
             sql += where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : string.Empty;
 
+            if (limit > 0)
+            {
+                sql += " LIMIT ?";
+                args.Add(limit);
+            }
+
             return new QueryEntry(sql, [.. args]);
         }
+
+        /// <summary>
+        /// PowerDNS search pattern => SQL LIKE pattern: '*' matches anything, every other character only itself
+        /// ('_' is common in DNS names, e.g. _sip._tcp, and would otherwise match any character).
+        /// </summary>
+        internal static string LikePattern(string q) =>
+            q.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("*", "%");
 
         internal static QueryEntry GetDomainInfoQuery(string? name = null, string? kind = null)
         {

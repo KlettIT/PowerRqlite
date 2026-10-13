@@ -45,6 +45,7 @@ namespace PowerRqlite.Tests
             powerdns = new ContainerBuilder(Image)
                 .WithNetwork(network)
                 .WithNetworkAliases("powerdns")
+                .WithPortBinding(8081, true)
                 .WithExtraHost("host.docker.internal", "host-gateway")
                 .WithResourceMapping(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "docker", "powerdns", "pdns.conf")), "/etc/powerdns/pdns.conf")
                 .WithResourceMapping(Encoding.UTF8.GetBytes($"remote-connection-string=http:url=http://host.docker.internal:{port}/PowerDns,timeout=20000\n"), "/etc/powerdns/pdns.d/e2e.conf")
@@ -82,6 +83,13 @@ namespace PowerRqlite.Tests
 
             return powerdns!.ExecAsync(["pdnsutil", .. args]);
         }
+
+        /// <summary>PowerDNS Web API (api-key from tests/docker/powerdns/pdns.conf).</summary>
+        public HttpClient Api() => new()
+        {
+            BaseAddress = new Uri($"http://{powerdns!.Hostname}:{powerdns.GetMappedPublicPort(8081)}/api/v1/servers/localhost/"),
+            DefaultRequestHeaders = { { "X-API-Key", "powerrqlite-test" } },
+        };
 
         public async Task<string> Dig(params string[] args) => (await dnstools.ExecAsync(["dig", "@powerdns", "+norec", .. args])).Stdout;
 

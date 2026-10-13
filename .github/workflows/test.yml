@@ -4,6 +4,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  # main.yml runs the tests before it builds and publishes a release.
+  workflow_call:
 
 jobs:
   test:
@@ -13,8 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         # Every supported PowerDNS major version; the E2E tests run against each.
+        # Pinned like all test images (PowerDnsStack.cs, RqliteFixture.cs, tests/docker/docker-compose.yml).
         pdns-image:
-          - powerdns/pdns-auth-49:latest
+          - powerdns/pdns-auth-49:4.9.17
           - powerdns/pdns-auth-51:5.1.4
     name: test (${{ matrix.pdns-image }})
     steps:

@@ -16,7 +16,7 @@ namespace PowerRqlite.Tests
     /// </summary>
     public sealed class RqliteFixture : IAsyncLifetime
     {
-        private readonly IContainer rqlite = new ContainerBuilder("rqlite/rqlite:latest")
+        private readonly IContainer rqlite = new ContainerBuilder("rqlite/rqlite:10.6.0")
             .WithPortBinding(4001, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(4001).ForPath("/readyz")))
             .Build();
@@ -45,12 +45,12 @@ namespace PowerRqlite.Tests
     /// <summary>
     /// The real app (src/Program.cs) pointed at a test rqlite.
     /// </summary>
-    public sealed class PowerRqliteApp(string rqliteUrl) : WebApplicationFactory<Program>
+    public sealed class PowerRqliteApp(string rqliteUrl, IDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder) =>
             builder.ConfigureAppConfiguration(config => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["rqliteOptions:Url"] = rqliteUrl,
-            }));
+            }.Concat(settings ?? new Dictionary<string, string?>())));
     }
 }

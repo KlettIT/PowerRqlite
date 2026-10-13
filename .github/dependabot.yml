@@ -1,0 +1,26 @@
+# Keeps packages, actions and the pinned test images current.
+# The test images are pinned in more places than Dependabot can see: when it bumps
+# tests/docker/docker-compose.yml, update PowerDnsStack.cs, RqliteFixture.cs and the matrix in test.yml to match.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /src
+      - /tests/PowerRqlite.Tests
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /src
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker-compose
+    directory: /tests/docker
+    schedule:
+      interval: weekly
