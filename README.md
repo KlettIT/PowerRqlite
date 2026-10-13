@@ -41,9 +41,17 @@ A simple deployment could be look like this:
   curl -X POST http://127.0.0.1:5000/PowerDns/deleteDomain/example.com.
   ```
 * The remote backend module has no zone-creation method either, so PowerRqlite creates a zone
-  the first time PowerDNS asks for its domain info (that is what makes `pdnsutil create-zone` work).
+  the first time PowerDNS asks for its domain info (that is what makes `pdnsutil create-zone` work on PowerDNS 4.x).
   Anything else that makes PowerDNS ask for an unknown zone creates an empty zone too, for example a
   DNS UPDATE from a client allowed by `allow-dnsupdate-from`. Keep that list (or TSIG) tight.
+* PowerDNS 5.x refuses `pdnsutil create-zone` (and `load-zone`, `create-secondary-zone`, `zone copy`) for the
+  remote backend ("None of the configured backends support zone creation"). Create a zone with:
+  ```
+  pdnsutil backend-cmd remote "create-zone example.com ns1.example.com"
+  ```
+  This also completes a zone that a failed `pdnsutil create-zone` left behind without SOA.
+* `pdnsutil` 5.x takes absolute record names: `pdnsutil add-record example.com www.example.com A 300 192.0.2.1`
+  (4.x: `www`).
 
 
 ## Quick Start
@@ -111,6 +119,12 @@ The tests need the .NET 10 SDK and a running Docker; rqlite, PowerDNS and the DN
 
 ```
 dotnet test tests/PowerRqlite.Tests
+```
+
+PowerDNS 5.1 is tested by default; `PDNS_IMAGE` selects another image (CI runs 4.9 and 5.1):
+
+```
+PDNS_IMAGE=powerdns/pdns-auth-49:latest dotnet test tests/PowerRqlite.Tests
 ```
 
 The end-to-end tests drive a real PowerDNS with `pdnsutil`, `dig` and `nsupdate`. The same setup can be started by hand:

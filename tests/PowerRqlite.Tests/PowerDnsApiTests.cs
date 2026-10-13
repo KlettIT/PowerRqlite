@@ -240,6 +240,90 @@ namespace PowerRqlite.Tests
             Assert.Equal("PING", doc.RootElement.GetProperty("log")[0].GetString());
         }
 
+        // Raw replaceRRSet bodies as PowerDNS' HTTP connector writes them for www.{zone} A 192.0.2.1 + 192.0.2.2, TTL 300.
+        // 4.x: "auth" without key and no '&' between the records, so record 0 arrives with ttl=3001. 5.x: well-formed.
+        [Theory]
+        [InlineData("1&rrset[0][content]=192.0.2.1&rrset[0][qclass]=1&rrset[0][qname]=www.{zone}&rrset[0][qtype]=A&rrset[0][ttl]=3001&rrset[1][content]=192.0.2.2&rrset[1][qclass]=1&rrset[1][qname]=www.{zone}&rrset[1][qtype]=A&rrset[1][ttl]=300")]
+        [InlineData("rrset[0][auth]=1&rrset[0][content]=192.0.2.1&rrset[0][qclass]=1&rrset[0][qname]=www.{zone}&rrset[0][qtype]=A&rrset[0][ttl]=300&rrset[1][auth]=1&rrset[1][content]=192.0.2.2&rrset[1][qclass]=1&rrset[1][qname]=www.{zone}&rrset[1][qtype]=A&rrset[1][ttl]=300")]
+        public async Task ReplaceRRSet_PowerDnsConnectorBody_StoresTtlUnchanged(string body)
+        {
+            var zone = $"ttl-{Guid.NewGuid():N}.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+            var domainId = await GetDomainId(zone);
+
+            var content = new StringContent(body.Replace("{zone}", zone), System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+            var replace = JsonDocument.Parse(await (await client.SendAsync(new HttpRequestMessage(HttpMethodPatch, $"/PowerDns/replacerrset/{domainId}/www.{zone}/A") { Content = content })).Content.ReadAsStringAsync());
+            Assert.True(replace.RootElement.GetProperty("result").GetBoolean());
+
+            var stored = await fixture.Service.QueryAsync("SELECT content, ttl FROM records WHERE domain_id = ? ORDER BY content", [int.Parse(domainId)]);
+            Assert.Equal([("192.0.2.1", 300), ("192.0.2.2", 300)], stored.Results![0]!.Values!.Select(row => (row[0].GetString(), row[1].GetInt32())).ToArray());
+        }
+
+        [Fact]
+        public async Task CreateZone_ViaBackendCmd_CreatesSoaAndNs()
+        {
+            var zone = $"create-{Guid.NewGuid():N}.example";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            async Task<bool> Create() => JsonDocument.Parse(await (await client.PostAsync("/PowerDns/directBackendCmd",
+                new FormUrlEncodedContent(new Dictionary<string, string> { ["query"] = $"create-zone {zone} ns1.{zone}" }))).Content.ReadAsStringAsync())
+                .RootElement.GetProperty("result").GetBoolean();
+
+            Assert.True(await Create());
+
+            var soa = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/lookup/{zone}./SOA"));
+            Assert.StartsWith($"a.misconfigured.dns.server.invalid hostmaster.{zone} 0 ", soa.RootElement.GetProperty("result")[0].GetProperty("content").GetString());
+            var ns = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/lookup/{zone}./NS"));
+            Assert.Equal($"ns1.{zone}", ns.RootElement.GetProperty("result")[0].GetProperty("content").GetString());
+
+            // A second create-zone must not add a second SOA.
+            Assert.False(await Create());
+        }
+
+        [Fact]
+        public async Task CreateZone_ViaBackendCmd_CompletesBareZone()
+        {
+            // PowerDNS 5.x: a failed 'pdnsutil create-zone' leaves the bare zone that getDomainInfo inserted.
+            var zone = $"bare-{Guid.NewGuid():N}.example.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+
+            var form = new FormUrlEncodedContent(new Dictionary<string, string> { ["query"] = $"create-zone {zone}" });
+            var doc = JsonDocument.Parse(await (await client.PostAsync("/PowerDns/directBackendCmd", form)).Content.ReadAsStringAsync());
+            Assert.True(doc.RootElement.GetProperty("result").GetBoolean());
+
+            var soa = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/lookup/{zone}/SOA"));
+            Assert.Single(soa.RootElement.GetProperty("result").EnumerateArray());
+            var zoneCount = await fixture.Service.QueryAsync("SELECT COUNT(*) FROM domains WHERE LOWER(name) = ?", [zone]);
+            Assert.Equal(1, zoneCount.Results![0]!.Values![0][0].GetInt32());
+        }
+
+        [Fact]
+        public async Task APILookup_AnswersLikeLookup()
+        {
+            // PowerDNS 5.x sends APILookup for Web API zone reads and RRset edits.
+            var zone = $"apilookup-{Guid.NewGuid():N}.";
+
+            await using var factory = Factory();
+            var client = factory.CreateClient();
+
+            _ = await client.GetStringAsync($"/PowerDns/getDomainInfo/{zone}");
+            var domainId = await GetDomainId(zone);
+            _ = await (await client.SendAsync(Patch($"/PowerDns/replacerrset/{domainId}/www.{zone}/A", RrsetForm(domainId, $"www.{zone}", "A", "10.7.7.7")))).Content.ReadAsStringAsync();
+
+            var doc = JsonDocument.Parse(await client.GetStringAsync($"/PowerDns/APILookup/www.{zone}/ANY"));
+            Assert.Equal("10.7.7.7", doc.RootElement.GetProperty("result")[0].GetProperty("content").GetString());
+        }
+
         [Fact]
         public async Task Transaction_Flow_InsertDeleteCommit_IsAtomic()
         {

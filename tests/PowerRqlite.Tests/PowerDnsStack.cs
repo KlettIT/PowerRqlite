@@ -42,7 +42,7 @@ namespace PowerRqlite.Tests
 
             await network.CreateAsync();
 
-            powerdns = new ContainerBuilder("powerdns/pdns-auth-49:latest")
+            powerdns = new ContainerBuilder(Image)
                 .WithNetwork(network)
                 .WithNetworkAliases("powerdns")
                 .WithExtraHost("host.docker.internal", "host-gateway")
@@ -63,7 +63,25 @@ namespace PowerRqlite.Tests
             await rqlite.DisposeAsync();
         }
 
-        public Task<ExecResult> Pdnsutil(params string[] args) => powerdns!.ExecAsync(["pdnsutil", .. args]);
+        /// <summary>PowerDNS image under test; CI runs the suite once per supported major version.</summary>
+        public static string Image => Environment.GetEnvironmentVariable("PDNS_IMAGE") ?? "powerdns/pdns-auth-51:5.1.4";
+
+        public static bool IsPowerDns4 => Image.Contains("pdns-auth-4");
+
+        /// <summary>
+        /// Tests pass record names relative to the zone ("www", "@"). pdnsutil 4.x appends the zone itself,
+        /// 5.x requires the absolute name, so it is expanded here.
+        /// </summary>
+        public Task<ExecResult> Pdnsutil(params string[] args)
+        {
+            if (!IsPowerDns4 && args is ["add-record" or "replace-rrset" or "delete-rrset", string zone, string name, ..])
+            {
+                args = [.. args];
+                args[2] = name == "@" ? zone : $"{name}.{zone}";
+            }
+
+            return powerdns!.ExecAsync(["pdnsutil", .. args]);
+        }
 
         public async Task<string> Dig(params string[] args) => (await dnstools.ExecAsync(["dig", "@powerdns", "+norec", .. args])).Stdout;
 

@@ -2,8 +2,10 @@
 #
 #   docker compose -f tests/docker/docker-compose.yml up --build
 #
-#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil create-zone example.test ns1.example.test
-#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil add-record example.test www A 300 192.0.2.1
+#   PowerDNS 5.1 by default; PDNS_IMAGE=powerdns/pdns-auth-49:latest for 4.9.
+#
+#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil backend-cmd remote "create-zone example.test ns1.example.test"
+#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil add-record example.test www.example.test A 300 192.0.2.1
 #   dig @127.0.0.1 -p 1053 www.example.test A
 #   nsupdate  (server 127.0.0.1 1053)
 
@@ -24,7 +26,7 @@ services:
       - rqlite
 
   powerdns:
-    image: powerdns/pdns-auth-49:latest
+    image: ${PDNS_IMAGE:-powerdns/pdns-auth-51:5.1.4}
     volumes:
       - ./powerdns/pdns.conf:/etc/powerdns/pdns.conf:ro
     ports:

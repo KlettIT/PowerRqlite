@@ -16,11 +16,35 @@ namespace PowerRqlite.Tests
             return result.Stdout;
         }
 
+        // backend-cmd works with every PowerDNS version; 'pdnsutil create-zone' only up to 4.x (see CreateZone_ViaPdnsutil).
         private async Task<string> CreateZone()
         {
             string zone = $"e2e-{Guid.NewGuid():N}.test";
-            await Ok(stack.Pdnsutil("create-zone", zone, $"ns1.{zone}"));
+            Assert.Equal("1", (await Ok(stack.Pdnsutil("backend-cmd", "remote", $"create-zone {zone} ns1.{zone}"))).Trim());
             return zone;
+        }
+
+        [Fact]
+        public async Task CreateZone_ViaPdnsutil()
+        {
+            string zone = $"e2e-{Guid.NewGuid():N}.test";
+            ExecResult create = await stack.Pdnsutil("create-zone", zone, $"ns1.{zone}");
+
+            if (PowerDnsStack.IsPowerDns4)
+            {
+                Assert.Equal(0, create.ExitCode);
+            }
+            else
+            {
+                // Upstream: 5.x requires CAP_CREATE, which the remote backend does not report. The bare zone that
+                // getDomainInfo inserted along the way is completed by backend-cmd.
+                Assert.Contains("None of the configured backends support zone creation", create.Stderr);
+                Assert.Equal("1", (await Ok(stack.Pdnsutil("backend-cmd", "remote", $"create-zone {zone} ns1.{zone}"))).Trim());
+            }
+
+            Assert.Contains($"hostmaster.{zone}.", Assert.Single(await DigShort(zone, "SOA")));
+            Assert.Equal([$"ns1.{zone}."], await DigShort(zone, "NS"));
+            await Ok(stack.Pdnsutil("check-zone", zone));
         }
 
         private async Task<string[]> DigShort(string name, string type) =>
