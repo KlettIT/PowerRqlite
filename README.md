@@ -33,10 +33,17 @@ A simple deployment could be look like this:
 
 ## Known Issues
 
-* Domains/Zones can not be deleted via pdnsutil. This have to be done via sql.
+* `pdnsutil delete-zone` and the PowerDNS Web API cannot delete a zone: the PowerDNS
+  remote backend module never sends a zone-deletion method (upstream gap).
+  Delete a zone through `pdnsutil backend-cmd` or the PowerRqlite extension endpoint instead:
   ```
-  DELETE FROM domain WHERE name='example.com.';
+  pdnsutil backend-cmd remote "delete-zone example.com"
+  curl -X POST http://127.0.0.1:5000/PowerDns/deleteDomain/example.com.
   ```
+* The remote backend module has no zone-creation method either, so PowerRqlite creates a zone
+  the first time PowerDNS asks for its domain info (that is what makes `pdnsutil create-zone` work).
+  Anything else that makes PowerDNS ask for an unknown zone creates an empty zone too, for example a
+  DNS UPDATE from a client allowed by `allow-dnsupdate-from`. Keep that list (or TSIG) tight.
 
 
 ## Quick Start
@@ -97,3 +104,17 @@ If you running *PowerRqlite* as a Docker container you can use Environment varia
 ```
 
 Translated into "Docker" it would be the following environment variable: `ASPNETCORE_Kestrel__EndPoints__Http__Url=http://localhost:5555`
+
+## Tests
+
+The tests need the .NET 10 SDK and a running Docker; rqlite, PowerDNS and the DNS tools are started with Testcontainers.
+
+```
+dotnet test tests/PowerRqlite.Tests
+```
+
+The end-to-end tests drive a real PowerDNS with `pdnsutil`, `dig` and `nsupdate`. The same setup can be started by hand:
+
+```
+docker compose -f tests/docker/docker-compose.yml up --build
+```

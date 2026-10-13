@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using PowerRqlite.Enums.rqlite;
 using PowerRqlite.Exceptions;
@@ -14,7 +14,7 @@ namespace PowerRqlite.Controllers
 {
     [Route("[controller]")]
     [ApiController]
-    public class PowerDnsController(IRqliteService rqliteService, ITransactionManager transactionManager, IConfiguration configRoot) : ControllerBase
+    public class PowerDnsController(IRqliteService rqliteService, ITransactionManager transactionManager) : ControllerBase
     {
         #region "GET"
 
@@ -24,7 +24,9 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetDomainInfoQuery(kind: "master")))
+                QueryEntry query = GetUpdatedMastersQuery();
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results != null)
                     {
@@ -50,16 +52,19 @@ namespace PowerRqlite.Controllers
         [HttpGet("searchRecords")]
         public async Task<IResponse> SearchRecords(string q, int maxResults)
         {
-
             try
             {
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetRecordsQuery(name: q.Replace("*", "%"), match_operator: "LIKE"), ReadConsistencyLevel.None))
+                // PowerDNS '*' wildcard => SQL LIKE '%'. Bound as parameter, never concatenated.
+                QueryEntry query = GetRecordsQuery(name: q.Replace("*", "%"), matchOperator: "LIKE");
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args, ReadConsistencyLevel.None))
                 {
                     if (queryResult.Results != null)
                     {
                         ListResponse response = ListResponse.FromValues(queryResult.Results.FirstOrDefault()?.Values);
 
-                        if (response.Result.Count > maxResults)
+                        // maxResults omitted (binds to 0) means "no limit" — a bound of 0 would wipe the whole result set.
+                        if (maxResults > 0 && response.Result.Count > maxResults)
                         {
                             response.Result = response.Result.Take(maxResults).ToList();
                         }
@@ -89,8 +94,9 @@ namespace PowerRqlite.Controllers
         {
             try
             {
+                QueryEntry query = GetDomainMetaDataQuery(name, true);
 
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetDomainMetaDataQuery(name, true)))
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results != null)
                     {
@@ -119,16 +125,17 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetDomainMetaDataQuery(name,false,kind)))
+                QueryEntry query = GetDomainMetaDataQuery(name, false, kind);
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results != null)
                     {
                         return StringArrayResponse.FromValues(queryResult.Results.FirstOrDefault()?.Values);
-                    } 
+                    }
                 }
 
                 throw new NoValuesException();
-
             }
             catch (NoValuesException)
             {
@@ -149,7 +156,9 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetDomainInfoQuery()))
+                QueryEntry query = GetDomainInfoQuery();
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results != null)
                     {
@@ -177,8 +186,9 @@ namespace PowerRqlite.Controllers
         {
             try
             {
+                QueryEntry query = GetDomainInfoQuery(name);
 
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetDomainInfoQuery(name)))
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results != null)
                     {
@@ -209,7 +219,9 @@ namespace PowerRqlite.Controllers
 
             try
             {
-                using (QueryResult queryResult = await rqliteService.QueryAsync(GetRecordsQuery(domain_id)))
+                QueryEntry query = GetRecordsQuery(domain_id);
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                 {
                     if (queryResult.Results == null) throw new NoValuesException();
                     ListResponse response = ListResponse.FromValues(queryResult.Results?.FirstOrDefault()?.Values);
@@ -217,7 +229,7 @@ namespace PowerRqlite.Controllers
                     // We need to ask Transaction Manager if we need to hook the lookup query
                     if (transactionManager.Transactions().Count == 0 ||
                         !transactionManager.TransactionExistsWith(domain_id)) return response;
-                    
+
                     List<TransactionRecord>? transactionRecords = transactionManager.GetLastTransaction(domain_id)?.Records;
 
                     Log.Verbose("Found existing Transaction which handles domain_id {DomainId} => Hooking this query with Transaction Manager", domain_id);
@@ -271,16 +283,15 @@ namespace PowerRqlite.Controllers
                     }
                     else
                     {
-                        Log.Verbose("Transaction Manager recturned a record => Record was inserted / updated in transaction => returning record");
+                        Log.Verbose("Transaction Manager returned a record => Record was inserted / updated in transaction => returning record");
                         Log.Debug("{TRR}", transactionRecord.ToString());
                         return new ListResponse() { Result = [transactionRecord] };
                     }
                 }
 
-                string query;
-                query = qtype == "ANY" ? GetRecordsQuery(name: qname) : GetRecordsQuery(name: qname, type: qtype);
+                QueryEntry query = qtype == "ANY" ? GetRecordsQuery(name: qname) : GetRecordsQuery(name: qname, type: qtype);
 
-                using (QueryResult queryResult = await rqliteService.QueryAsync(query, ReadConsistencyLevel.None))
+                using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args, ReadConsistencyLevel.None))
                 {
                     if (queryResult.Results is null || queryResult.Results.Count == 0)
                     {
@@ -313,55 +324,41 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-
-                string query;
-
                 int domain_id = await GetDomainID(name);
 
-                if (value.Length == 0)
-                {
-                    query = $"DELETE FROM domainmetadata WHERE domain_id={domain_id} AND LOWER(kind)='{kind.ToLower()}'";
-                }
-                else
-                {
-                    query = $"SELECT 1 FROM domainmetadata WHERE domain_id={domain_id} AND LOWER(kind)='{kind.ToLower()}'";
+                QueryEntry query = value.Length == 0
+                    ? new QueryEntry("DELETE FROM domainmetadata WHERE domain_id = ? AND LOWER(kind) = ?", [domain_id, kind.ToLower()])
+                    : new QueryEntry("SELECT 1 FROM domainmetadata WHERE domain_id = ? AND LOWER(kind) = ?", [domain_id, kind.ToLower()]);
 
-                    using (QueryResult queryResult = await rqliteService.QueryAsync(query))
+                if (value.Length > 0)
+                {
+                    using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
                     {
-                        if (queryResult.Results != null)
-                        {
-                            if (queryResult.Results[0]?.Values?[0][0].GetInt32() == 1)
-                            {
-                                query = $"UPDATE domainmetadata SET content = {value[0]} WHERE domain_id={domain_id} AND LOWER(kind)='{kind.ToLower()}'";
-                            }
-                            else
-                            {
-                                query = $"INSERT INTO domainmetadata(domain_id, kind, content) VALUES({domain_id},'{kind}','{value[0]}')";
-                            }
-                        }
-                        else
-                        {
-                            return new BoolResponse { Result = false };
-                        }
+                        // First-time set has no metadata row yet => INSERT, existing row => UPDATE. Value is bound, never interpolated.
+                        bool exists = queryResult.Results is not null &&
+                                     queryResult.Results.Count > 0 &&
+                                     queryResult.Results[0]?.Values is { Count: > 0 };
+
+                        query = exists
+                            ? new QueryEntry("UPDATE domainmetadata SET content = ? WHERE domain_id = ? AND LOWER(kind) = ?", [value[0], domain_id, kind.ToLower()])
+                            : new QueryEntry("INSERT INTO domainmetadata (domain_id, kind, content) VALUES (?, ?, ?)", [domain_id, kind, value[0]]);
                     }
                 }
 
-                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query))
+                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query.Sql, query.Args))
                 {
                     if (execResult.Results is null || execResult.Results.FirstOrDefault()?.RowsAffected <= 0)
                     {
                         return new BoolResponse { Result = false };
                     }
-                    else
-                    {
-                        return new BoolResponse { Result = true };
-                    }
+
+                    return new BoolResponse { Result = true };
                 }
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "{ErrorMessage}", ex.Message);
-                return new BoolResponse { Log = [$"Failed to update Domain meta data for domain {name} => Kind: {kind} | value: {value}"], Result = false };
+                return new BoolResponse { Log = [$"Failed to update Domain meta data for domain {name} => Kind: {kind} | value: {string.Join("|", value)}"], Result = false };
             }
         }
 
@@ -371,7 +368,9 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                using (ExecuteResult execResult = await rqliteService.ExecuteAsync($"UPDATE domains SET notified_serial={serial} WHERE id={id}"))
+                QueryEntry query = new("UPDATE domains SET notified_serial = ? WHERE id = ?", [serial, id]);
+
+                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query.Sql, query.Args))
                 {
                     if (execResult.Results is null || execResult.Results.FirstOrDefault()?.RowsAffected <= 0)
                     {
@@ -394,63 +393,65 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                bool result = false;
-                List<string> querys = [];
+                List<QueryEntry> queries = [];
                 int transactionid = -1;
- 
+
                 if (transactionManager.Transactions().Exists(x => x.DomainId == domain_id)) { transactionid = transactionManager.GetLastTransaction(domain_id)?.Id ?? -1; }
 
+                // PowerDNS' HTTP connector writes the next record's "auth" bool keyless and without '&' right after
+                // the previous "ttl" (ttl=300 + "1" => 3001), so every TTL but the last carries one extra digit.
                 if (rrset.Length > 1)
                 {
                     rrset.SkipLast(1).AsParallel().ForAll(x => x.TTL /= 10);
                 }
 
+                QueryEntry deleteQuery = GetDeleteRecordQuery(domain_id, qname, qtype);
+
                 if (transactionid != -1)
                 {
-                    if (!transactionManager.AddTransaction(transactionid, GetDeleteRecordQuery(domain_id, qname, qtype), domain_id, qname, qtype, Enums.PowerDNS.TransactionMode.DELETE))
+                    if (!transactionManager.AddTransaction(transactionid, deleteQuery, domain_id, qname, qtype, Enums.PowerDNS.TransactionMode.DELETE))
                     {
                         throw new InvalidOperationException($"Failed to add transaction record to transaction with id {transactionid}");
                     }
                 }
                 else
                 {
-                    querys.Add(GetDeleteRecordQuery(domain_id, qname, qtype));
+                    queries.Add(deleteQuery);
                 }
 
                 foreach (Record rr in rrset)
                 {
                     rr.DomainId = domain_id;
 
+                    QueryEntry insertQuery = GetInsertRecordQuery(rr);
+
                     if (transactionid != -1)
                     {
-                        if (!transactionManager.AddTransaction(transactionid, GetInsertRecordQuery(rr), rr, Enums.PowerDNS.TransactionMode.INSERT))
+                        if (!transactionManager.AddTransaction(transactionid, insertQuery, rr, Enums.PowerDNS.TransactionMode.INSERT))
                         {
                             throw new InvalidOperationException($"Failed to add transaction record to transaction with id {transactionid}");
                         }
                     }
                     else
                     {
-                        querys.Add(GetInsertRecordQuery(rr));
+                        queries.Add(insertQuery);
                     }
-
                 }
 
-                if (querys.Count > 0)
+                if (queries.Count > 0)
                 {
-
-                    using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(querys))
+                    using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(queries.Select(x => x.Sql).ToList(), queries.Select(x => x.Args).ToArray()))
                     {
-                        if (execResult.Results is null || execResult.Results.Exists(x => x is null || x.LastInsertId <= 0))
+                        // INSERTs always affect exactly one row; a DELETE with no matching rows is valid (replacing a not-yet-existing RRset).
+                        if (execResult.Results is null ||
+                            execResult.Results.Select((r, i) => (r, i)).Any(p => p.r is null || (queries[p.i].Sql.StartsWith("INSERT") && p.r!.RowsAffected <= 0)))
                         {
                             throw new InvalidOperationException("One or more transactions failed to execute!");
                         }
                     }
                 }
 
-                result = true;
-
-                return new BoolResponse() { Result = result };
-
+                return new BoolResponse() { Result = true };
             }
             catch (Exception ex)
             {
@@ -469,8 +470,9 @@ namespace PowerRqlite.Controllers
 
                 if (rr.DomainId <= 0) { rr.DomainId = domainId; }
 
-                return transactionManager.AddTransaction(trxid, GetInsertRecordQuery(rr), rr, Enums.PowerDNS.TransactionMode.INSERT) ? new BoolResponse { Result = true } : new BoolResponse { Result = false };
+                QueryEntry query = GetInsertRecordQuery(rr);
 
+                return transactionManager.AddTransaction(trxid, query, rr, Enums.PowerDNS.TransactionMode.INSERT) ? new BoolResponse { Result = true } : new BoolResponse { Result = false };
             }
             catch (Exception ex)
             {
@@ -483,7 +485,6 @@ namespace PowerRqlite.Controllers
         [HttpPatch("feedrecord")]
         public async Task<IResponse> FeedRecord([FromForm] Record rr)
         {
-
             try
             {
                 if (rr.DomainId <= 0)
@@ -492,7 +493,6 @@ namespace PowerRqlite.Controllers
                 }
 
                 return await InsertRecord(rr);
-
             }
             catch (Exception ex)
             {
@@ -505,11 +505,10 @@ namespace PowerRqlite.Controllers
 
         #region "POST"
 
-        // POST PowerDNSAPI/starttransaction/1/example.com
+        // POST PowerDNS/starttransaction/1/example.com
         [HttpPost("starttransaction/{domain_id}/{domain}/{trxid}")]
         public async Task<IResponse> StartTransaction(int domain_id, string domain, int trxid)
         {
-
             try
             {
                 if (domain_id <= 0)
@@ -518,7 +517,6 @@ namespace PowerRqlite.Controllers
                 }
 
                 return new BoolResponse { Result = transactionManager.StartTransaction(trxid, domain_id, domain) };
-
             }
             catch (Exception ex)
             {
@@ -527,20 +525,21 @@ namespace PowerRqlite.Controllers
             }
         }
 
-        // POST PowerDNSAPI/committransaction/1
+        // POST PowerDNS/committransaction/1
         [HttpPost("committransaction/{trxid}")]
         public async Task<IResponse> CommitTransaction(int trxid)
         {
             try
             {
-                List<string>? transactions = transactionManager.GetTransactionQuerys(trxid);
+                List<QueryEntry> transactions = transactionManager.GetTransactionQuerys(trxid);
 
                 if (transactions.Count > 0)
                 {
-
-                    using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(transactions))
+                    using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(transactions.Select(x => x.Sql).ToList(), transactions.Select(x => x.Args).ToArray()))
                     {
-                        if (execResult.Results is null || execResult.Results.Exists(x => x is null || x.LastInsertId <= 0))
+                        // Same rule as ReplaceRRSet: only INSERTs must affect a row.
+                        if (execResult.Results is null ||
+                            execResult.Results.Select((r, i) => (r, i)).Any(p => p.r is null || (transactions[p.i].Sql.StartsWith("INSERT") && p.r!.RowsAffected <= 0)))
                         {
                             throw new InvalidOperationException("One or more transactions failed to execute!");
                         }
@@ -566,14 +565,12 @@ namespace PowerRqlite.Controllers
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex,"Failed to remove/cleanup transaction");
+                    Log.Error(ex, "Failed to remove/cleanup transaction");
                 }
-
             }
-
         }
 
-        // POST PowerDNSAPI/aborttransaction/1
+        // POST PowerDNS/aborttransaction/1
         [HttpPost("aborttransaction/{trxid}")]
         public IResponse AbortTransaction(int trxid)
         {
@@ -586,59 +583,153 @@ namespace PowerRqlite.Controllers
                 Log.Error(ex, "{ErrorMessage}", ex.Message);
                 return new BoolResponse { Log = [$"Failed to abort Transaction with id {trxid}"], Result = false };
             }
+        }
 
+        // POST PowerDNS/deleteDomain/example.com.
+        // PowerRqlite extension: PowerDNS' remote backend module does not send a
+        // zone deletion method (see Backend::deleteDomain default in PowerDNS),
+        // so zones are deleted through this endpoint instead.
+        [HttpPost("deleteDomain/{name}")]
+        public async Task<IResponse> DeleteDomain(string name)
+        {
+            try
+            {
+                // PowerDNS stores zones absolute ("example.com."); accept the name with or without the dot.
+                int domain_id = await GetDomainID(name.TrimEnd('.') + ".");
+
+                // Explicit deletes keep the zone deletion working even without
+                // SQLite's per-connection foreign_keys pragma. One bulk = one transaction.
+                List<string> queries =
+                [
+                    "DELETE FROM records WHERE domain_id = ?",
+                    "DELETE FROM domainmetadata WHERE domain_id = ?",
+                    "DELETE FROM comments WHERE domain_id = ?",
+                    "DELETE FROM cryptokeys WHERE domain_id = ?",
+                    "DELETE FROM domains WHERE id = ?",
+                ];
+
+                object?[] args = [domain_id, domain_id, domain_id, domain_id, domain_id];
+
+                using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(queries, queries.Select(_ => args).ToArray()))
+                {
+                    if (execResult.Results is null || execResult.Results.LastOrDefault()?.RowsAffected <= 0)
+                    {
+                        return new BoolResponse { Result = false, Log = [$"Domain '{name}' not found, nothing deleted."] };
+                    }
+
+                    Log.Information("Deleted zone '{Zone}' (domain_id {DomainId})", name, domain_id);
+                    return new BoolResponse { Result = true };
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                Log.Debug("DeleteDomain: domain '{Domain}' does not exist", name);
+                return new BoolResponse { Result = false };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "{ErrorMessage}", ex.Message);
+                return new BoolResponse { Log = [$"Failed to delete domain '{name}'"], Result = false };
+            }
+        }
+
+        // POST PowerDNS/directBackendCmd  (pdnsutil backend-cmd remote "delete-zone example.com")
+        [HttpPost("directBackendCmd")]
+        public async Task<IResponse> DirectBackendCmd([FromForm] string query)
+        {
+            Log.Debug("directBackendCmd: {Query}", query);
+
+            // 'pdnsutil delete-zone' never reaches a remote backend (no deleteDomain upstream), so it is offered here.
+            if (query.Split(' ', StringSplitOptions.RemoveEmptyEntries) is ["delete-zone", string zone])
+            {
+                return await DeleteDomain(zone);
+            }
+
+            return new BoolResponse { Log = [query], Result = true };
+        }
+
+        // Unimplemented methods and the root-zone lookup ("/lookup/%2e/SOA" is normalized to "/lookup/SOA")
+        // must answer {"result":false}; an empty 404 makes PowerDNS abort with "Cannot parse JSON reply".
+        [AcceptVerbs("GET", "POST", "PATCH", "PUT", "DELETE")]
+        [Route("{**path}")]
+        public IResponse NotImplemented(string path)
+        {
+            Log.Debug("Not implemented: {Path}", path);
+            return new BoolResponse { Result = false };
         }
 
         #endregion
 
         #region "Helper"
 
-        private static BoolResponse NotImplemented()
+        internal static QueryEntry GetRecordsQuery(int? domain_id = null, string? name = null, string? type = null, string matchOperator = "=")
         {
-            return new BoolResponse { Log = ["Not implemented"], Result = false };
-        }
-
-        private static string GetRecordsQuery(int? domain_id = null,string? name = null, string? type = null, string match_operator = "=")
-        {
-            string query = "SELECT domain_id,name,type,content,ttl,disabled,auth FROM records";
+            List<string> where = [];
+            List<object?> args = [];
 
             if (domain_id != null)
             {
-                query = $"{query} WHERE domain_id {match_operator} {domain_id}";
+                where.Add($"domain_id {matchOperator} ?");
+                args.Add(domain_id);
             }
 
             if (!string.IsNullOrEmpty(name))
             {
-                query = query.Contains("WHERE") ? $"{query} AND LOWER(name) {match_operator} '{name.ToLower()}'" : $"{query} WHERE LOWER(name) {match_operator} '{name.ToLower()}'";
+                where.Add($"LOWER(name) {matchOperator} ?");
+                args.Add(name.ToLower());
             }
 
             if (!string.IsNullOrEmpty(type))
             {
-                query = query.Contains("WHERE") ? $"{query} AND type {match_operator} '{type}'" : $"{query} WHERE type {match_operator} '{type}'";
+                where.Add($"type {matchOperator} ?");
+                args.Add(type);
             }
 
-            return query;
+            string sql = "SELECT domain_id,name,type,content,ttl,disabled,auth FROM records";
+            sql += where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : string.Empty;
+
+            return new QueryEntry(sql, [.. args]);
         }
 
-        private static string GetDomainInfoQuery(string? name = null, string? kind = null)
+        internal static QueryEntry GetDomainInfoQuery(string? name = null, string? kind = null)
         {
-            string query = $"SELECT id,name,master,last_check,type,notified_serial,account FROM domains";
+            List<string> where = [];
+            List<object?> args = [];
 
             if (!string.IsNullOrEmpty(name))
             {
-                query = $"{query} WHERE LOWER(name)='{name.ToLower()}'";
+                where.Add("LOWER(name) = ?");
+                args.Add(name.ToLower());
             }
 
             if (!string.IsNullOrEmpty(kind))
             {
-                query = query.Contains("WHERE") ? $"{query} AND LOWER(kind)='{kind.ToLower()}'" : $"{query} WHERE LOWER(kind)='{kind.ToLower()}'";
+                // 'kind' is the domains 'type' column (native/master/slave)
+                where.Add("LOWER(type) = ?");
+                args.Add(kind.ToLower());
             }
 
-            return query;
+            string sql = "SELECT id,name,master,last_check,type,notified_serial,account FROM domains";
+            sql += where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : string.Empty;
 
-
+            return new QueryEntry(sql, [.. args]);
         }
-        private static string GetDomainMetaDataQuery(string name, bool includeKindColumn = false , string? kind = null)
+
+        /// <summary>
+        /// Master zones including their current SOA serial (from the SOA record),
+        /// so PowerDNS can compare it with notified_serial for NOTIFY decisions.
+        /// </summary>
+        internal static QueryEntry GetUpdatedMastersQuery(string kind = "master")
+        {
+            const string sql =
+                "SELECT d.id, d.name, d.master, d.last_check, d.type, d.notified_serial, d.account, r.content " +
+                "FROM domains d LEFT JOIN records r ON r.domain_id = d.id AND r.type = 'SOA' AND LOWER(r.name) = LOWER(d.name) " +
+                "WHERE LOWER(d.type) = ?";
+
+            return new QueryEntry(sql, [kind.ToLower()]);
+        }
+
+        internal static QueryEntry GetDomainMetaDataQuery(string name, bool includeKindColumn = false, string? kind = null)
         {
             List<string> cols = ["content"];
 
@@ -647,33 +738,56 @@ namespace PowerRqlite.Controllers
                 cols.Add("kind");
             }
 
-            return string.IsNullOrEmpty(kind) ? $"SELECT {string.Join(",",cols)} FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND LOWER(domains.name)='{name.ToLower()}'" : $"SELECT {string.Join(",", cols)} FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND LOWER(domains.name)='{name.ToLower()}' AND LOWER(domainmetadata.kind)='{kind.ToLower()}'";
+            string sql = $"SELECT {string.Join(",", cols)} FROM domains,domainmetadata WHERE domains.id=domainmetadata.domain_id AND LOWER(domains.name) = ?";
+            List<object?> args = [name.ToLower()];
 
-            
+            if (!string.IsNullOrEmpty(kind))
+            {
+                sql += " AND LOWER(domainmetadata.kind) = ?";
+                args.Add(kind.ToLower());
+            }
+
+            return new QueryEntry(sql, [.. args]);
         }
-        private static string GetInserDomainQuery(string name)
+
+        internal static QueryEntry GetInserDomainQuery(string name)
         {
-            return $"INSERT INTO domains (name,master,last_check,type,notified_serial,account) VALUES('{name.ToLower()}','',NULL,'NATIVE',NULL,'')";
+            return new QueryEntry(
+                "INSERT INTO domains (name,master,last_check,type,notified_serial,account) VALUES (?,'',NULL,'NATIVE',NULL,'')",
+                [name.ToLower()]);
         }
-        private static string GetInsertRecordQuery(Record rr)
+
+        internal static QueryEntry GetInsertRecordQuery(Record rr)
         {
-            return $"INSERT INTO records (domain_id,name,type,content,ttl,disabled,ordername,auth) VALUES ({rr.DomainId},'{rr.QName}','{rr.QType}','{rr.Content}',{rr.TTL},{rr.Disabled},NULL,{rr.Auth})";
+            return new QueryEntry(
+                "INSERT INTO records (domain_id,name,type,content,ttl,disabled,ordername,auth) VALUES (?,?,?,?,?,?,NULL,?)",
+                [rr.DomainId, rr.QName, rr.QType, rr.Content, rr.TTL, rr.Disabled ? 1 : 0, rr.Auth]);
         }
 
-        private static string GetDeleteRecordQuery(int domain_id, string qname, string qtype)
+        internal static QueryEntry GetDeleteRecordQuery(int domain_id, string qname, string qtype)
         {
-            string query;
+            string sql = qtype == "ANY"
+                ? "DELETE FROM records WHERE domain_id = ? AND LOWER(name) = ?"
+                : "DELETE FROM records WHERE domain_id = ? AND LOWER(name) = ? AND type = ?";
 
-            query = qtype == "ANY" ? $"DELETE FROM records WHERE domain_id={domain_id} AND LOWER(name)='{qname.ToLower()}'" : $"DELETE FROM records WHERE domain_id={domain_id} AND (LOWER(name)='{qname.ToLower()}' AND type='{qtype}')";
+            object?[] args = qtype == "ANY"
+                ? [domain_id, qname.ToLower()]
+                : [domain_id, qname.ToLower(), qtype];
 
-            return query;
+            return new QueryEntry(sql, args);
+        }
+
+        internal static QueryEntry GetDomainIDQuery(string domainname)
+        {
+            return new QueryEntry("SELECT id FROM domains WHERE LOWER(name) = ?", [domainname.ToLower()]);
         }
 
         private async Task<int> GetDomainID(string domainname)
         {
-            using (QueryResult queryResult = await rqliteService.QueryAsync($"SELECT id FROM domains WHERE LOWER(name)='{domainname.ToLower()}'"))
-            {
+            QueryEntry query = GetDomainIDQuery(domainname);
 
+            using (QueryResult queryResult = await rqliteService.QueryAsync(query.Sql, query.Args))
+            {
                 if (queryResult.Results is null || queryResult.Results.FirstOrDefault()?.Values is null || queryResult.Results.FirstOrDefault()?.Values?.Count <= 0)
                 {
                     throw new InvalidOperationException($"Failed to get id for domain name '{domainname}'");
@@ -689,20 +803,16 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                string query = GetInserDomainQuery(domain);
+                QueryEntry query = GetInserDomainQuery(domain);
 
-                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query))
+                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query.Sql, query.Args))
                 {
-
                     if (execResult.Results is null || execResult.Results.Exists(x => x.RowsAffected <= 0))
                     {
                         return new BoolResponse { Result = false };
                     }
-                    else
-                    {
-                        return new BoolResponse { Result = true };
-                    }
 
+                    return new BoolResponse { Result = true };
                 }
             }
             catch (Exception ex)
@@ -716,20 +826,16 @@ namespace PowerRqlite.Controllers
         {
             try
             {
-                string query = GetInsertRecordQuery(rr);
+                QueryEntry query = GetInsertRecordQuery(rr);
 
-                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query))
+                using (ExecuteResult execResult = await rqliteService.ExecuteAsync(query.Sql, query.Args))
                 {
-
                     if (execResult.Results is null || execResult.Results.Exists(x => x.RowsAffected <= 0))
                     {
                         return new BoolResponse { Result = false };
                     }
-                    else
-                    {
-                        return new BoolResponse { Result = true };
-                    }
 
+                    return new BoolResponse { Result = true };
                 }
             }
             catch (Exception ex)

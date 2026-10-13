@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace PowerRqlite.Models.PowerDNS
 {
@@ -11,8 +11,8 @@ namespace PowerRqlite.Models.PowerDNS
         public required string Zone { get; set; }
 
         [JsonPropertyName("serial")]
-        public string? Serial { get; set; }
-        
+        public int? Serial { get; set; } = 0;
+
         [JsonPropertyName("kind")]
         public string Kind { get; set; } = "NATIVE";
 

@@ -19,5 +19,8 @@ namespace PowerRqlite.Models.rqlite
 
         [JsonPropertyName("values")]
         public List<List<JsonElement>>? Values { get; set; }
+
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
     }
 }

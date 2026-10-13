@@ -1,0 +1,34 @@
+# Manual test stack: the same PowerDNS setup the E2E tests in tests/PowerRqlite.Tests run.
+#
+#   docker compose -f tests/docker/docker-compose.yml up --build
+#
+#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil create-zone example.test ns1.example.test
+#   docker compose -f tests/docker/docker-compose.yml exec powerdns pdnsutil add-record example.test www A 300 192.0.2.1
+#   dig @127.0.0.1 -p 1053 www.example.test A
+#   nsupdate  (server 127.0.0.1 1053)
+
+services:
+  rqlite:
+    image: rqlite/rqlite:latest
+    ports:
+      - "127.0.0.1:4001:4001"
+
+  powerrqlite:
+    build: ../../src
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      RqliteOptions__Url: http://rqlite:4001
+    ports:
+      - "127.0.0.1:5000:8080"
+    depends_on:
+      - rqlite
+
+  powerdns:
+    image: powerdns/pdns-auth-49:latest
+    volumes:
+      - ./powerdns/pdns.conf:/etc/powerdns/pdns.conf:ro
+    ports:
+      - "127.0.0.1:1053:53/udp"
+      - "127.0.0.1:1053:53/tcp"
+    depends_on:
+      - powerrqlite

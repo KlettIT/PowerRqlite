@@ -1,8 +1,9 @@
-﻿using PowerRqlite.Enums.PowerDNS;
+using PowerRqlite.Enums.PowerDNS;
 using PowerRqlite.Interfaces;
 using PowerRqlite.Interfaces.PowerDNS;
 using PowerRqlite.Models;
 using PowerRqlite.Models.PowerDNS;
+using PowerRqlite.Models.rqlite;
 
 namespace PowerRqlite.Services.PowerDNS
 {
@@ -35,7 +36,7 @@ namespace PowerRqlite.Services.PowerDNS
             }
         }
 
-        public bool AddTransaction(int id, string query, int domain_id, string qname, string qtype, TransactionMode transactionMode)
+        public bool AddTransaction(int id, QueryEntry entry, int domain_id, string qname, string qtype, TransactionMode transactionMode)
         {
 
             lock (_lock)
@@ -45,7 +46,7 @@ namespace PowerRqlite.Services.PowerDNS
 
                 if (transaction != null)
                 {
-                    transaction.Queries.Add(query);
+                    transaction.Queries.Add(entry);
                     transaction.Records.Add(new TransactionRecord() { DomainId = domain_id, QName = qname, QType = qtype, TransactionMode = transactionMode, Content = string.Empty, TTL = -1 });
                     return true;
                 }
@@ -56,7 +57,7 @@ namespace PowerRqlite.Services.PowerDNS
             }
         }
 
-        public bool AddTransaction(int id, string query, IRecord record, TransactionMode transactionMode)
+        public bool AddTransaction(int id, QueryEntry entry, IRecord record, TransactionMode transactionMode)
         {
 
             lock (_lock)
@@ -66,7 +67,7 @@ namespace PowerRqlite.Services.PowerDNS
 
                 if (transaction != null)
                 {
-                    transaction.Queries.Add(query);
+                    transaction.Queries.Add(entry);
                     transaction.Records.Add(new TransactionRecord() { Auth = record.Auth, Content = record.Content, Disabled = record.Disabled, DomainId = record.DomainId, QName = record.QName, QType = record.QType, TTL = record.TTL, TransactionMode = transactionMode });
 
                     return true;
@@ -125,7 +126,7 @@ namespace PowerRqlite.Services.PowerDNS
             }
         }
 
-        public List<string> GetTransactionQuerys(int id)
+        public List<QueryEntry> GetTransactionQuerys(int id)
         {
             lock (_lock)
             {
@@ -135,11 +136,11 @@ namespace PowerRqlite.Services.PowerDNS
             }
         }
 
-        public List<string> GetTransactionQuerys(string domain)
+        public List<QueryEntry> GetTransactionQuerys(string domain)
         {
             lock (_lock)
             {
-                Transaction transaction = transactions.First(x => x.Domain.Equals(domain,StringComparison.OrdinalIgnoreCase));
+                Transaction? transaction = transactions.LastOrDefault(x => x.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase));
 
                 return transaction != null ? transaction.Queries : throw new InvalidOperationException("Transaction does not exist!");
             }
@@ -149,11 +150,18 @@ namespace PowerRqlite.Services.PowerDNS
         {
             lock (_lock)
             {
-                Transaction? transaction = transactions.LastOrDefault(x => x.Records.Exists(y => y.QName.Equals(qname,StringComparison.OrdinalIgnoreCase) && y.QType == qtype));
+                // For "ANY" qtype, match any record with the given qname (ignore qtype in the existence check).
+                bool hasMatchingRecord(Transaction t) => t.Records.Exists(y =>
+                    y.QName.Equals(qname, StringComparison.OrdinalIgnoreCase) &&
+                    (qtype == "ANY" || y.QType == qtype));
+
+                Transaction? transaction = transactions.LastOrDefault(hasMatchingRecord);
 
                 if (transaction != null)
                 {
-                    TransactionRecord? record = qtype == "ANY" ? transaction.Records.LastOrDefault(x => x.QName.Equals(qname, StringComparison.OrdinalIgnoreCase)) : transaction.Records.LastOrDefault(x => x.QName.Equals(qname, StringComparison.OrdinalIgnoreCase) && x.QType == qtype);
+                    TransactionRecord? record = qtype == "ANY"
+                        ? transaction.Records.LastOrDefault(x => x.QName.Equals(qname, StringComparison.OrdinalIgnoreCase))
+                        : transaction.Records.LastOrDefault(x => x.QName.Equals(qname, StringComparison.OrdinalIgnoreCase) && x.QType == qtype);
 
                     if (record != null && record.TransactionMode == TransactionMode.INSERT)
                     {
@@ -163,23 +171,27 @@ namespace PowerRqlite.Services.PowerDNS
                     {
                         return null;
                     }
-
                 }
                 else
                 {
                     return null;
                 }
-
             }
         }
         public bool TransactionExistsWith(string qname, string qtype)
         {
-            return transactions.Exists(x => x.Records.Exists(y => y.QName.Equals(qname, StringComparison.OrdinalIgnoreCase) && y.QType == qtype));
+            lock (_lock)
+            {
+                return transactions.Exists(x => x.Records.Exists(y => y.QName.Equals(qname, StringComparison.OrdinalIgnoreCase) && y.QType == qtype));
+            }
         }
 
         public bool TransactionExistsWith(int domain_id)
         {
-            return transactions.Exists(x => x.DomainId == domain_id);
+            lock (_lock)
+            {
+                return transactions.Exists(x => x.DomainId == domain_id);
+            }
         }
 
         public List<Transaction> Transactions()
