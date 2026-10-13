@@ -265,7 +265,9 @@ namespace PowerRqlite.Controllers
         }
 
         // GET PowerDNS/lookup/www.example.com./ANY
+        // APILookup (PowerDNS 5.x, Web API) is a lookup that may include disabled records; this lookup never filters them.
         [HttpGet("lookup/{qname}/{qtype}")]
+        [HttpGet("APILookup/{qname}/{qtype}")]
         public async Task<IResponse> Lookup(string qtype, string qname)
         {
             try
@@ -398,9 +400,12 @@ namespace PowerRqlite.Controllers
 
                 if (transactionManager.Transactions().Exists(x => x.DomainId == domain_id)) { transactionid = transactionManager.GetLastTransaction(domain_id)?.Id ?? -1; }
 
-                // PowerDNS' HTTP connector writes the next record's "auth" bool keyless and without '&' right after
+                // PowerDNS 4.x' HTTP connector writes the next record's "auth" bool keyless and without '&' right after
                 // the previous "ttl" (ttl=300 + "1" => 3001), so every TTL but the last carries one extra digit.
-                if (rrset.Length > 1)
+                // 5.x sends "rrset[i][auth]=1" and separates the records; there the TTLs are already correct.
+                bool legacyEncoding = !Request.Form.Keys.Any(k => k.EndsWith("[auth]", StringComparison.Ordinal) || k.EndsWith(".auth", StringComparison.Ordinal));
+
+                if (legacyEncoding && rrset.Length > 1)
                 {
                     rrset.SkipLast(1).AsParallel().ForAll(x => x.TTL /= 10);
                 }
@@ -639,13 +644,86 @@ namespace PowerRqlite.Controllers
         {
             Log.Debug("directBackendCmd: {Query}", query);
 
-            // 'pdnsutil delete-zone' never reaches a remote backend (no deleteDomain upstream), so it is offered here.
-            if (query.Split(' ', StringSplitOptions.RemoveEmptyEntries) is ["delete-zone", string zone])
+            switch (query.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                return await DeleteDomain(zone);
-            }
+                // 'pdnsutil delete-zone' never reaches a remote backend (no deleteDomain upstream), so it is offered here.
+                case ["delete-zone", string zone]:
+                    return await DeleteDomain(zone);
 
-            return new BoolResponse { Log = [query], Result = true };
+                // PowerDNS 5.x refuses 'pdnsutil create-zone' for the remote backend (no CAP_CREATE), so it is offered here too.
+                case ["create-zone", string zone]:
+                    return await CreateZone(zone, null);
+
+                case ["create-zone", string zone, string nameserver]:
+                    return await CreateZone(zone, nameserver);
+
+                default:
+                    return new BoolResponse { Log = [query], Result = true };
+            }
+        }
+
+        // Same result as 'pdnsutil create-zone ZONE [NSNAME]' with PowerDNS' default SOA.
+        private async Task<IResponse> CreateZone(string name, string? nameserver)
+        {
+            string zone = name.TrimEnd('.') + ".";
+
+            try
+            {
+                // On PowerDNS 5.x a failed 'pdnsutil create-zone' has already inserted the bare zone through getDomainInfo,
+                // so a zone without SOA is completed instead of rejected.
+                int domain_id;
+
+                try
+                {
+                    domain_id = await GetDomainID(zone);
+                }
+                catch (InvalidOperationException)
+                {
+                    if (await InsertDomain(zone) is not BoolResponse { Result: true })
+                    {
+                        return new BoolResponse { Result = false, Log = [$"Failed to create zone '{zone}'"] };
+                    }
+
+                    domain_id = await GetDomainID(zone);
+                }
+
+                QueryEntry soaQuery = GetRecordsQuery(domain_id, zone, "SOA");
+
+                using (QueryResult queryResult = await rqliteService.QueryAsync(soaQuery.Sql, soaQuery.Args))
+                {
+                    if (queryResult.Results?.FirstOrDefault()?.Values is { Count: > 0 })
+                    {
+                        return new BoolResponse { Result = false, Log = [$"Zone '{zone}' exists already"] };
+                    }
+                }
+
+                string apex = zone.TrimEnd('.');
+                List<QueryEntry> queries =
+                [
+                    GetInsertRecordQuery(new Record { DomainId = domain_id, QName = zone, QType = "SOA", Content = $"a.misconfigured.dns.server.invalid hostmaster.{apex} 0 10800 3600 604800 3600", TTL = 3600, Auth = 1 }),
+                ];
+
+                if (!string.IsNullOrEmpty(nameserver))
+                {
+                    queries.Add(GetInsertRecordQuery(new Record { DomainId = domain_id, QName = zone, QType = "NS", Content = nameserver.TrimEnd('.'), TTL = 3600, Auth = 1 }));
+                }
+
+                using (ExecuteResult execResult = await rqliteService.ExecuteBulkAsync(queries.Select(x => x.Sql).ToList(), queries.Select(x => x.Args).ToArray()))
+                {
+                    if (execResult.Results is null || execResult.Results.Exists(x => x is null || x.RowsAffected <= 0))
+                    {
+                        return new BoolResponse { Result = false, Log = [$"Failed to create zone '{zone}'"] };
+                    }
+                }
+
+                Log.Information("Created zone '{Zone}' (domain_id {DomainId})", zone, domain_id);
+                return new BoolResponse { Result = true };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "{ErrorMessage}", ex.Message);
+                return new BoolResponse { Log = [$"Failed to create zone '{zone}'"], Result = false };
+            }
         }
 
         // Unimplemented methods and the root-zone lookup ("/lookup/%2e/SOA" is normalized to "/lookup/SOA")
