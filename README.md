@@ -141,6 +141,33 @@ Docker: `PowerRqlite__AutoCreateZones=false`
 `GET /health` answers `Healthy` (HTTP 200) when rqlite can be queried, otherwise `Unhealthy` (HTTP 503).
 Use it for load balancer, Docker or Kubernetes health checks.
 
+### Performance
+
+Every DNS query that PowerDNS cannot answer from its caches costs one or more HTTP requests to *PowerRqlite* and rqlite.
+Two PowerDNS settings matter most:
+
+* **Keep the PowerDNS caches on** (`cache-ttl`, `negquery-cache-ttl`, `query-cache-ttl`, `zone-cache-refresh-interval` at their defaults).
+  Without them every DNS query needs about four backend requests, because PowerDNS looks up the zone again each time.
+* **Raise `distributor-threads`** (default 3). Each thread waits for its HTTP request to *PowerRqlite*, so with
+  the default only three backend requests run at a time. 8 to 16 is a good start; more only helps while CPU is left.
+
+```
+distributor-threads=8
+```
+
+Measured on one 4-core machine (PowerDNS 5.1, *PowerRqlite* and a single rqlite node sharing it), 50,000 records,
+caches on, only random non-existent names (every query reaches the backend):
+
+| `distributor-threads` | Queries/s | Avg. latency |
+|---|---|---|
+| 3 (default) | ~1,250 | 80 ms |
+| 8 | ~2,950 | 34 ms |
+| 16 | ~3,750 | 27 ms |
+
+Queries PowerDNS can answer from its caches are not limited by the backend (~140,000/s on the same machine).
+
+*PowerRqlite* logs each request from PowerDNS at Debug level only; failed requests are logged at Error.
+
 ## Tests
 
 The tests need the .NET 10 SDK and a running Docker; rqlite, PowerDNS and the DNS tools are started with Testcontainers.

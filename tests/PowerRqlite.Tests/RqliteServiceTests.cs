@@ -15,6 +15,26 @@ namespace PowerRqlite.Tests
         private const string Injection = "evil'); DELETE FROM domains; --";
 
         [Fact]
+        public async Task DeployAsync_AddsMissingIndexes_AndLookupsUseThem()
+        {
+            // A database deployed by an older version has the tables but no indexes.
+            await fixture.Service.ExecuteBulkAsync(["DROP INDEX IF EXISTS records_lname_type", "DROP INDEX IF EXISTS records_domain_id"]);
+
+            await InitService.DeployAsync(fixture.Service);
+
+            var indexes = await fixture.Service.QueryAsync("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='records'");
+            Assert.Equal(["records_domain_id", "records_lname_type"], indexes.Results![0]!.Values!.Select(row => row[0].GetString()).Order());
+
+            // Same SQL as the DNS lookup path, so a change to the query that defeats the index fails here.
+            var lookup = PowerRqlite.Controllers.PowerDnsController.GetRecordsQuery(name: "www.example.com.", type: "A", includeDisabled: false);
+            var plan = await fixture.Service.QueryAsync("EXPLAIN QUERY PLAN " + lookup.Sql, lookup.Args);
+            Assert.Contains("USING INDEX records_lname_type", plan.Results![0]!.Values![0][3].GetString());
+
+            // Idempotent: a second start changes nothing.
+            await InitService.DeployAsync(fixture.Service);
+        }
+
+        [Fact]
         public async Task Parameterized_Insert_And_Query_RoundTrip()
         {
             var name = $"service-test-{Guid.NewGuid():N}.com";

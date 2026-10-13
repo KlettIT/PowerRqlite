@@ -7,6 +7,7 @@ using PowerRqlite.Services;
 using PowerRqlite.Services.PowerDNS;
 using PowerRqlite.Services.rqlite;
 using Serilog;
+using Serilog.Events;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +30,10 @@ builder.Services.AddControllers()
 WebApplication app = builder.Build();
 
 app.UseHttpLogging();
-app.UseSerilogRequestLogging();
+// PowerDNS sends several requests per DNS query; logging each one at Information floods the log under load.
+// Successful requests are logged at Debug, failures stay at Error.
+app.UseSerilogRequestLogging(options => options.GetLevel = (context, _, ex) =>
+    ex is not null || context.Response.StatusCode >= 500 ? LogEventLevel.Error : LogEventLevel.Debug);
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
