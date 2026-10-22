@@ -11,7 +11,7 @@
 
 services:
   rqlite:
-    image: rqlite/rqlite:10.6.0
+    image: rqlite/rqlite:10.6.2
     ports:
       - "127.0.0.1:4001:4001"
 
