@@ -18,7 +18,7 @@ jobs:
         # Pinned like all test images (PowerDnsStack.cs, RqliteFixture.cs, tests/docker/docker-compose.yml).
         pdns-image:
           - powerdns/pdns-auth-49:4.9.17
-          - powerdns/pdns-auth-51:5.1.4
+          - powerdns/pdns-auth-51:5.1.5
     name: test (${{ matrix.pdns-image }})
     steps:
       - name: Checkout

@@ -65,7 +65,7 @@ namespace PowerRqlite.Tests
         }
 
         /// <summary>PowerDNS image under test; CI runs the suite once per supported major version.</summary>
-        public static string Image => Environment.GetEnvironmentVariable("PDNS_IMAGE") ?? "powerdns/pdns-auth-51:5.1.4";
+        public static string Image => Environment.GetEnvironmentVariable("PDNS_IMAGE") ?? "powerdns/pdns-auth-51:5.1.5";
 
         public static bool IsPowerDns4 => Image.Contains("pdns-auth-4");
 

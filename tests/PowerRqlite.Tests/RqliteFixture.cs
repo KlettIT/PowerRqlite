@@ -16,7 +16,7 @@ namespace PowerRqlite.Tests
     /// </summary>
     public sealed class RqliteFixture : IAsyncLifetime
     {
-        private readonly IContainer rqlite = new ContainerBuilder("rqlite/rqlite:10.6.0")
+        private readonly IContainer rqlite = new ContainerBuilder("rqlite/rqlite:10.6.5")
             .WithPortBinding(4001, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(4001).ForPath("/readyz")))
             .Build();
