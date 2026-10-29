@@ -9,18 +9,22 @@ updates:
       - /tests/PowerRqlite.Tests
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
 
   - package-ecosystem: docker
     directory: /src
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
 
   - package-ecosystem: docker-compose
     directory: /tests/docker
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
