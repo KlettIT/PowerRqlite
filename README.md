@@ -1,26 +1,29 @@
 ![PowerRqlite](Resources/logo-text.png)
 
-*PowerRqlite* is a small [PowerDNS Authoritative](https://powerdns.com) backend which allows to use a [rqlite](https://github.com/rqlite/rqlite) cluster as database / storage.
+# PowerDNS backend for rqlite (distributed SQLite)
 
-![GitHub](https://img.shields.io/github/license/KlettIT/PowerRqlite?style=plastic)
+*PowerRqlite* is a small [PowerDNS Authoritative](https://powerdns.com) remote backend that stores zones and records in an [rqlite](https://github.com/rqlite/rqlite) cluster (distributed SQLite).
+It lets you run a highly available PowerDNS setup without MySQL/MariaDB replication or a Galera cluster.
+
+![License](https://img.shields.io/github/license/KlettIT/PowerRqlite?style=plastic)
 
 
 ## How it works
 
 *PowerRqlite* implements the required PowerDNS [remote backend functions](https://doc.powerdns.com/authoritative/backends/remote.html) and stores the data in the rqlite cluster using the [rqlite Data API](https://rqlite.io/docs/api/api/).
 
-A simple deployment could be look like this:
+A simple deployment could look like this:
 
-![SimpleDeployment](docs/SimpleDeployment.png)
+![Simple deployment: PowerDNS Authoritative, PowerRqlite and an rqlite cluster](docs/SimpleDeployment.png)
 
-*PowerRqlite* can be also be used to build a High Availbility setup **without** need for (complex) HA Backend MariaDB Galera Cluster.
+*PowerRqlite* can also be used to build a high availability (HA) DNS setup **without** the need for a (complex) MariaDB Galera cluster as HA backend:
 
-![HADeployment](docs/HADeployment.png)
+![High availability deployment: two PowerDNS Authoritative servers behind dnsdist, each with its own PowerRqlite, sharing one rqlite cluster](docs/HADeployment.png)
 
 ## Prerequisites
 
 * .NET 10 compatible Operating System (Ubuntu/Debian/CentOS/Alpine Linux/Windows/macOS) or a Docker Host
-* [rqrlite Cluster](https://github.com/rqlite/rqlite/blob/master/DOC/CLUSTER_MGMT.md)
+* [rqlite Cluster](https://rqlite.io/docs/clustering/)
 * PowerDNS Authoritative 4.3.x or higher, including 5.x (tested with 4.9 and 5.1; see Known Issues for 5.x)
 
 *PowerRqlite* can be used for the following DNS Modes of Operation:
@@ -65,7 +68,7 @@ A simple deployment could be look like this:
 
 ### rqlite
 
-Grab the latest release from the rqlite [Github release page](https://github.com/rqlite/rqlite/releases). Once installed you can start a single rqlite node:
+Grab the latest release from the rqlite [GitHub release page](https://github.com/rqlite/rqlite/releases). Once installed you can start a single rqlite node:
 
 ```
 rqlited -node-id 1 ~/node.1
@@ -73,10 +76,10 @@ rqlited -node-id 1 ~/node.1
 
 ### PowerDNS
 
-Install PowerDNS Authoritative a documented [here](https://doc.powerdns.com/authoritative/installation.html).
+Install PowerDNS Authoritative as documented [here](https://doc.powerdns.com/authoritative/installation.html).
 To use *PowerRqlite* you also have to install the `pdns-backend-remote` package.
 
-Once installed we need to configure the remote-backend. To do this edit the `pdns.conf` configuration file add the following at the end of the file:
+Once installed, configure the remote backend by adding the following at the end of the `pdns.conf` configuration file:
 
 ```
 launch=remote
@@ -85,7 +88,7 @@ remote-connection-string=http:url=http://127.0.0.1:5000/PowerDNS,timeout=20000
 
 ### PowerRqlite
 
-Grab the latest release from the rqlite [Github release page](https://github.com/KlettIT/PowerRqlite/releases). Once installed you can start it:
+Grab the latest release from the PowerRqlite [GitHub release page](https://github.com/KlettIT/PowerRqlite/releases). Once installed you can start it:
 
 ```
 chmod +x PowerRqlite
@@ -98,12 +101,12 @@ When running as a Docker container you can configure it via the `rqliteOptions__
 
 ## Configuration
 
-*PowerRqlite* is ASP.NET Core application and will therefore configured via the file `appsettings.json`.
-If you running *PowerRqlite* as a Docker container you can use Environment variables to configure *PowerRqlite*.
+*PowerRqlite* is an ASP.NET Core application and is therefore configured via the file `appsettings.json`.
+If you run *PowerRqlite* as a Docker container you can use environment variables to configure *PowerRqlite*.
 
 ### Change default Port
 
-*PowerRqlite* listens default on Port `5000`. In case you want to change it, you just need to edit `appsettings.json` configuration file. In this example we change the listen port to `5555`
+*PowerRqlite* listens on port `5000` by default. To change it, edit the `appsettings.json` configuration file. In this example we change the listen port to `5555`:
 
 ```
 {
