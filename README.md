@@ -1,6 +1,6 @@
 ![PowerRqlite](Resources/logo-text.svg)
 
-# PowerDNS backend for rqlite (distributed SQLite)
+# PowerRqlite – PowerDNS backend for rqlite
 
 *PowerRqlite* is a small [PowerDNS Authoritative](https://powerdns.com) remote backend that stores zones and records in an [rqlite](https://github.com/rqlite/rqlite) cluster (distributed SQLite).
 It lets you run a highly available PowerDNS setup without MySQL/MariaDB replication or a Galera cluster.
