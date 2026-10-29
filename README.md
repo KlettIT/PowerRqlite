@@ -14,11 +14,11 @@ It lets you run a highly available PowerDNS setup without MySQL/MariaDB replicat
 
 A simple deployment could look like this:
 
-![Simple deployment: PowerDNS Authoritative, PowerRqlite and an rqlite cluster](docs/SimpleDeployment.png)
+![Simple deployment: PowerDNS Authoritative, PowerRqlite and an rqlite cluster](docs/SimpleDeployment.svg)
 
 *PowerRqlite* can also be used to build a high availability (HA) DNS setup **without** the need for a (complex) MariaDB Galera cluster as HA backend:
 
-![High availability deployment: two PowerDNS Authoritative servers behind dnsdist, each with its own PowerRqlite, sharing one rqlite cluster](docs/HADeployment.png)
+![High availability deployment: two PowerDNS Authoritative servers behind dnsdist, each with its own PowerRqlite, sharing one rqlite cluster](docs/HADeployment.svg)
 
 ## Prerequisites
 
