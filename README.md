@@ -1,4 +1,4 @@
-![PowerRqlite](Resources/logo-text.png)
+![PowerRqlite](Resources/logo-text.svg)
 
 # PowerDNS backend for rqlite (distributed SQLite)
 

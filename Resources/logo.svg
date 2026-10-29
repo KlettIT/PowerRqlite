@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="PowerRqlite">
+  <title>PowerRqlite</title>
+  <defs>
+    <linearGradient id="dot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9b26"/>
+      <stop offset="1" stop-color="#e8730c"/>
+    </linearGradient>
+  </defs>
+  <g stroke-width=".6" stroke-linejoin="round">
+    <path d="M76.25 34.44 L115.44 34.44 L121.28 40.27 L121.28 79.47 L93.56 51.75Z" fill="#0b3a8c" stroke="#0b3a8c"/>
+    <path d="M93.56 51.75 L121.28 79.47 L121.28 87.73 L93.56 115.44 L93.56 76.25Z" fill="#0b63d6" stroke="#0b63d6"/>
+    <path d="M93.56 76.25 L93.56 115.44 L87.73 121.28 L48.53 121.28 L76.25 93.56Z" fill="#2b8ff7" stroke="#2b8ff7"/>
+    <path d="M76.25 93.56 L48.53 121.28 L40.27 121.28 L12.56 93.56 L51.75 93.56Z" fill="#85c4ff" stroke="#85c4ff"/>
+    <path d="M51.75 93.56 L12.56 93.56 L6.72 87.73 L6.72 48.53 L34.44 76.25Z" fill="#b9dfff" stroke="#b9dfff"/>
+    <path d="M34.44 76.25 L6.72 48.53 L6.72 40.27 L34.44 12.56 L34.44 51.75Z" fill="#52a8fc" stroke="#52a8fc"/>
+    <path d="M34.44 51.75 L34.44 12.56 L40.27 6.72 L79.47 6.72 L51.75 34.44Z" fill="#1677ec" stroke="#1677ec"/>
+    <path d="M51.75 34.44 L79.47 6.72 L87.73 6.72 L115.44 34.44 L76.25 34.44Z" fill="#0a4fb8" stroke="#0a4fb8"/>
+  </g>
+  <path d="M76.25 34.44 L93.56 51.75 L93.56 76.25 L76.25 93.56 L51.75 93.56 L34.44 76.25 L34.44 51.75 L51.75 34.44Z" fill="#fff"/>
+  <circle cx="49.4" cy="56.7" r="5.8" fill="url(#dot)"/>
+  <circle cx="64" cy="56.7" r="5.8" fill="url(#dot)"/>
+  <circle cx="78.6" cy="56.7" r="5.8" fill="url(#dot)"/>
+  <circle cx="49.4" cy="71.3" r="5.8" fill="url(#dot)"/>
+  <circle cx="64" cy="71.3" r="5.8" fill="url(#dot)"/>
+  <circle cx="78.6" cy="71.3" r="5.8" fill="url(#dot)"/>
+</svg>
